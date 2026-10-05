@@ -13,6 +13,32 @@
 
 ---
 
+## ⚠ 与 dsh-pet 共存的命名空间约定（改代码前必读）
+
+**两个插件可以同时安装、同时运行**（用户明确要求「两只宠物一起出现」）。
+DSH 的**命令名**和**浏览器端 UI 槽位 id 是扁平的、没有命名空间**，而本包是从 dsh-pet 改的，
+一不小心就会和它重名。血泪清单（每一条都实际炸过）：
+
+| 类别 | dsh-pet 用 | **本包必须用** | 重名的后果 |
+|---|---|---|---|
+| 插件名（宿主/浏览器半侧） | `pet` | **`redteam-pet`** | 插件永不激活（`fiberPhase: null`） |
+| 命令 | `/pet` `/chat` `/balance` | **`/rpet`** **`/rchat`** **`/rpet-balance`** | `command "xxx" is already registered` → **整个 DSH 启动报错** |
+| `shell.overlay` 槽位格子 | `pet` | **`rpet`** | 两只宠物抢同一格，只显示一只 |
+| `settings.section` 区块 | `pet-config` | **`rpet-config`** | 设置页互相顶掉 |
+| 命令图标表的键 | `pet` `chat` `balance` | **`rpet`** `rchat` `rpet-balance` | 图标挂不上（键要和命令名一致） |
+| locale 命名空间 | `pet.config` | **`redteam-pet.config`** | 文案字典互相覆盖，标题串味 |
+| CSS 类名 | `pet-bub-*` | **`rpet-bub-*`** | 两边样式互相污染 |
+| CSS 变量 | `--pet-size` | **`--dsh-redteam-pet-size`**（**不要**再写 `var(--pet-size, …)` 兜底） | 尺寸被对方的值污染 |
+| 路由前缀 | `/dsh-pet-7340` | **`/dsh-redteam-pet-7340`** | 路由互相覆盖 |
+| 用户数据目录 | `$DSH_HOME/dsh-pet` | **`$DSH_HOME/dsh-redteam-pet`** | 配置/记忆串到一起 |
+
+**保险丝**：宿主半侧的三个命令注册全部走 `registerCommandSafely()`
+（`lib/index.js`）—— 万一将来又撞名，**只跳过那一个命令并打印警告，绝不让插件激活失败、更不会拖垮 DSH**。
+这条保险丝是 2026-10-05 那次「插件把 DSH 搞到起不来」事故后加的，别删。
+
+
+---
+
 ## 一、10 个动作
 
 | 动作名（素材文件名，逐字一致） | 触发时机 |
