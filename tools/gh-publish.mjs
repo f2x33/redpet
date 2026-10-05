@@ -13,6 +13,23 @@
 //   上传成 blob → 建一棵 tree → 建一个 commit → 把分支指过去。
 //   结果就是**一次干净的提交**，不产生 82 个中间提交。
 //
+// 【已知限制（2026-10-05 实测踩到，都是 GitHub 侧的，不是本工具的 bug）】
+//
+//   ① 空仓库（0 个提交）**不能**用 Git Data API：第一个 POST /git/blobs 就返回
+//        409 "Git Repository is empty."
+//      必须先有首提交。用 Contents API 建一个（拿仓库里本来就会有的文件当载体）：
+//        PUT /repos/{owner}/{repo}/contents/.gitattributes
+//        body: { message, content: <base64>, branch: "main" }
+//      成功后再跑本工具，它会以那次提交为父提交正常追加，最终文件树仍是清单里的那批。
+//
+//   ② 重命名 / 删除仓库需要令牌具备该仓库的 **Administration: Read and write**。
+//      只有 Contents 权限的细粒度令牌（本机 2026-10-05 用的就是这种）会返回
+//        403 "Resource not accessible by personal access token"
+//      —— 改名和删除都会失败，只能去网页做：
+//        改名：https://github.com/{owner}/{repo}/settings → Rename
+//        删除：https://github.com/{owner}/{repo}/settings → Danger Zone → Delete this repository
+//      （发布本身只需要 Contents: Read and write，本机实测可用。）
+//
 // 【用法】
 //   $env:GH_TOKEN = "github_pat_xxx"
 //   node tools/gh-publish.mjs --dry      # 只体检：探 IP、查仓库、数文件，不写
