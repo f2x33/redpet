@@ -20,7 +20,12 @@
 //
 // 【环境变量】
 //   GH_TOKEN   GitHub 令牌（必填）
-//   GH_REPO    默认 f2x33/redpet
+//   GH_REPO    默认 f2x33/redteam-pet
+//              ⚠️ 这个仓库名**不要**被「标识统一改名」脚本一起改掉！
+//                 GitHub 上的实际仓库是 f2x33/redteam-pet（公开，2026-10-05 创建）。
+//                 2026-10-05 曾因 tools/_rename2.mjs 的全局替换，把这里的发布目标
+//                 仓库名也一起换掉了（换成了一个不存在的同名变体），整条发布链路作废。
+//                 现在 _rename2.mjs 里有 PROTECT 保护表专门挡这类外部标识。
 //   GH_BRANCH  默认 main
 //   GH_LIST    文件清单路径（默认 out/_gh-files.txt）
 //   GH_MSG     提交说明文件（默认 out/_gh-msg.txt，缺省用内置文案）
@@ -38,7 +43,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
 const TOKEN = process.env.GH_TOKEN || '';
-const REPO = process.env.GH_REPO || 'f2x33/redpet';
+const REPO = process.env.GH_REPO || 'f2x33/redteam-pet'; // ⚠️ 外部标识，别被改名脚本改（见文件头注释）
 const BRANCH = process.env.GH_BRANCH || 'main';
 const LIST = process.env.GH_LIST || path.join(ROOT, 'out', '_gh-files.txt');
 const MSG_FILE = process.env.GH_MSG || path.join(ROOT, 'out', '_gh-msg.txt');

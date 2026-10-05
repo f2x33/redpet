@@ -64,6 +64,46 @@ const RULES = [
   { from: 'rchat', to: 'redchat' },
 ];
 
+// ============================================================================
+// PROTECT —— 绝不能跟着改的「外部标识」保护表
+// ============================================================================
+// 【为什么必须有这张表】
+//   2026-10-05 这次改名把 tools/gh-publish.mjs 里的**发布目标仓库名**也一起改了：
+//       const REPO = process.env.GH_REPO || 'f2x33/redteam-pet';   // 原样
+//    →  const REPO = process.env.GH_REPO || 'f2x33/redpet';         // 仓库不存在！
+//   于是发布工具指向一个 404 的仓库，整条发布链路废掉。
+//
+// 【最关键的教训】
+//   改完之后我做过"残留扫描"（搜还有没有 redteam），**它是干净的** ——
+//   因为问题不是"改漏了"，而是"改多了"。**残留扫描在原理上抓不出过度替换。**
+//   所以要防这类错，唯一有效的办法是**在替换前就把不能碰的字符串摘出来**。
+//
+// 【实现】替换前先把这些字面量换成 NUL 占位符，规则跑完再还原。
+//   占位符含 \u0000，不可能出现在源码里，也不可能被 FROM 命中。
+//   按长度**降序**处理，避免短串先替换破坏长串（如 f2x33/redteam-pet 是
+//   f2x33/redteam-pet-desktop 的前缀）。
+//
+// 【新增外部标识时】往这里加一条，别指望残留扫描能发现。
+// ============================================================================
+const PROTECT = [
+  'f2x33/redteam-pet-desktop', // 姊妹项目 redteam-pet-desktop 的 GitHub 仓库
+  'f2x33/redteam-pet',         // 本包的 GitHub 仓库（公开，2026-10-05 创建）
+  'PC2005-cloud/dsh-pet',      // 上游 dsh-pet 仓库署名
+].sort((a, b) => b.length - a.length);
+
+const slot = (i) => `\u0000PROTECT${String(i)}\u0000`;
+const protectAll = (text) => {
+  let out = text;
+  PROTECT.forEach((lit, i) => { out = out.split(lit).join(slot(i)); });
+  return out;
+};
+const restoreAll = (text) => {
+  let out = text;
+  PROTECT.forEach((lit, i) => { out = out.split(slot(i)).join(lit); });
+  return out;
+};
+const countAll = (text) => PROTECT.map((lit) => text.split(lit).length - 1);
+
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, e.name);
@@ -78,11 +118,17 @@ function walk(dir, out = []) {
 
 const files = walk(ROOT);
 const totals = Object.fromEntries(RULES.map((r) => [r.from, 0]));
+const protectTotals = PROTECT.map(() => 0);
 const touched = [];
+const pending = [];
 
 for (const { full, rel } of files) {
   const before = fs.readFileSync(full, 'utf8');
-  let after = before;
+  const beforeProtect = countAll(before);
+  beforeProtect.forEach((n, i) => { protectTotals[i] += n; });
+
+  // ① 先把受保护的字符串摘出来，② 再跑替换规则，③ 最后原样还原
+  let after = protectAll(before);
   const hits = {};
   for (const { from, to } of RULES) {
     const n = after.split(from).length - 1;
@@ -92,10 +138,24 @@ for (const { full, rel } of files) {
       after = after.split(from).join(to);
     }
   }
-  if (Object.keys(hits).length === 0) continue;
+  after = restoreAll(after);
+
+  // ④ 守门：受保护字符串的数量必须一字不差
+  const afterProtect = countAll(after);
+  const drift = PROTECT.map((lit, i) => ({ lit, was: beforeProtect[i], now: afterProtect[i] })).filter((d) => d.was !== d.now);
+
+  if (Object.keys(hits).length === 0 && drift.length === 0) continue;
+  if (drift.length > 0) {
+    console.error(`❌ ${rel}: 受保护字符串数量变了！（保护表失效，已中止，未写入任何文件）`);
+    for (const d of drift) console.error(`     ${d.lit}: ${d.was} → ${d.now}`);
+    process.exit(1);
+  }
   touched.push({ rel, hits });
-  if (!DRY) fs.writeFileSync(full, after, 'utf8');
+  pending.push({ full, after });
 }
+
+// 全部校验通过后才落盘
+if (!DRY) for (const { full, after } of pending) fs.writeFileSync(full, after, 'utf8');
 
 touched.sort((a, b) => {
   const sa = Object.values(a.hits).reduce((x, y) => x + y, 0);
@@ -112,4 +172,8 @@ console.log('\n合计：');
 for (const { from, to } of RULES) console.log(`  ${from} → ${to}：${totals[from]} 处`);
 console.log(`  涉及文件：${touched.length} 个`);
 
+console.log('\n外部标识保护表（这些一处都没动）：');
+PROTECT.forEach((lit, i) => console.log(`  ${protectTotals[i] > 0 ? '✅' : '·'} ${lit.padEnd(30)} 共 ${protectTotals[i]} 处`));
+
 if (DRY) console.log('\n（--dry：没有写任何文件）');
+
