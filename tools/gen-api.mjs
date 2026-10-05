@@ -44,10 +44,11 @@
 // 【花钱安全 —— 这一节是本脚本的核心，改动请先读完整段】
 //   ① 没有 --go 绝对不发任何 HTTP 请求（--probe 也一样要 --go）。dry-run 只打印计划。
 //   ② --all 是硬门槛：没给 --all 又没给 --limit/--only 时只空跑，并打印「要真跑请加 --all 或 --limit N」。
-//   ③ 单价是脚本顶部两个显式常量（PRICE_IMAGE_YUAN / PRICE_VIDEO_YUAN_PER_SEC），
-//      **占位价，按你自己账号的实际单价改**。dry-run 与每次真跑前都打印：
-//        「本次预计 ¥X（图片 N 张 × ¥a + 视频 M 段 × D 秒 × ¥b/秒）」
-//      这是**估算、不是账单承诺**：真实计费口径（视频常按 token 计费）以方舟控制台账单为准。
+//   ③ 单价是脚本顶部两个显式常量（PRICE_IMAGE_YUAN / PRICE_VIDEO_YUAN_PER_MTOKENS），
+//      视频按 **token** 计费，token 量 = 宽×高×帧率×时长÷1024（实测误差 <1%），
+//      单价默认取 Seedance 2.0 文档的 92 元/百万 tokens（480P/720P）。**按你自己账号的实际单价改**。
+//      dry-run 与每次真跑前都打印 token 量与金额，并给一行「换分辨率/时长能省多少」的对照。
+//      这是**估算、不是账单承诺**：真实金额以方舟控制台账单为准。
 //   ④ 失败绝不自动重发。只有 HTTP 429 / 5xx / 网络错误才做**网络层**重试（上限 HTTP_RETRIES）。
 //      模型返回 error、任务状态 failed、内容被审核拒绝 —— 一律立刻停下、打印原始响应、退出码非 0。
 //      更严的一点（有意为之）：建任务的 POST 只在 429 上重试。5xx 和网络错误对 POST **不重试**，
@@ -98,14 +99,51 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
 // ============================================================================
-// 【单价】占位价，按你自己账号的实际单价改（方舟控制台 → 计费说明/账单）
+// 【单价】—— 2026-10-05 改用**真实账单口径**重写（不再是我拍脑袋的占位价）
 // ----------------------------------------------------------------------------
-// 这两个数只用来在动手前打印一个量级，**不是账单承诺**：真实计费口径（视频常按 token 计费，
-// 与分辨率/时长/帧率都有关）以控制台账单为准。宁可估高，别估低。
-// 参考量级：图片约 0.2 元/张；视频按秒计约 0.x 元/秒（10 秒一段 = 数元）。
+// 视频按 **token** 计费，token 量几乎正好是 (宽 × 高 × 帧率 × 时长) ÷ 1024：
+//   实测 720p / 24fps / 5 秒 → **108,900 tokens**（公式给 108,000，差 0.8%）
+//
+// 单价（火山引擎文档《AICC-Seedance2.0模型计费说明》2026-08-03 版）：
+//   doubao-seedance-2.0（480P / 720P）不含视频输入 = 92 元/百万 tokens
+//   doubao-seedance-2.0（480P / 720P）含视频输入   = 56 元/百万 tokens
+//   doubao-seedance-2.0（1080P）      不含视频输入 = 102 元/百万 tokens
+//   ⚠ 我们实际用的是 seedance-**2-5**，单价可能高于 2.0；以控制台账单为准。
+//   ⚠ **480P 与 720P 单价相同**，所以省钱只能靠降分辨率（token 少），不是换个型号。
+//
+// 由此推出的量级（不含视频输入、92 元/百万 tokens、24fps）：
+//   720p：21,600 tokens/秒 → 5 秒 ¥9.9   10 秒 ¥19.9
+//   480p： 9,600 tokens/秒 → 5 秒 ¥4.4   10 秒 ¥8.8
+//   全量参考：10 段 × 10 秒 720p ≈ **¥199**（很贵！）
+//             10 段 × 10 秒 480p ≈ ¥88
+//             10 段 ×  5 秒 480p ≈ **¥44**  ← 素材最终只有 640×360，480p 完全够
 // ============================================================================
-const PRICE_IMAGE_YUAN = 0.20;        // 占位价，按你自己账号的实际单价改
-const PRICE_VIDEO_YUAN_PER_SEC = 0.30; // 占位价，按你自己账号的实际单价改
+/** 视频刊例价：元/百万 tokens（480P/720P、不含视频输入）。按你账号实际单价改。 */
+const PRICE_VIDEO_YUAN_PER_MTOKENS = 92;
+/** 图片单价（元/张）。Seedream 按张计费，这个数**未实测**，请按控制台账单改。 */
+const PRICE_IMAGE_YUAN = 0.20;
+/** 视频帧率（Seedance 默认 24）。 */
+const VIDEO_FPS = 24;
+
+/** 分辨率字符串 → [宽, 高]（16:9）。 */
+function pixelSize(resolution) {
+  const table = { '480p': [864, 480], '720p': [1280, 720], '1080p': [1920, 1080] };
+  return table[resolution] ?? table['720p'];
+}
+
+/**
+ * 一段视频的 token 量估算：(宽 × 高 × 帧率 × 时长) ÷ 1024。
+ * 这条公式是 2026-10-05 拿真实任务反推出来的（720p/24fps/5s 实测 108,900 tokens）。
+ */
+function estimateVideoTokens(resolution, durationSec) {
+  const [w, h] = pixelSize(resolution);
+  return Math.round((w * h * VIDEO_FPS * durationSec) / 1024);
+}
+
+/** 一段视频的估算花费（元）。 */
+function estimateVideoYuan(resolution, durationSec) {
+  return (estimateVideoTokens(resolution, durationSec) / 1e6) * PRICE_VIDEO_YUAN_PER_MTOKENS;
+}
 
 // ----------------------------------------------------------------- 参数 / 配置
 const ARK_BASE = process.env.ARK_BASE || 'https://ark.cn-beijing.volces.com/api/v3';
@@ -421,6 +459,27 @@ function authHeaders() {
 }
 
 // ----------------------------------------------------------------- ① 图生图
+/**
+ * 从字节头嗅探真实图片格式。
+ *
+ * 【2026-10-05 实测】Ark 的图生图即使 response_format=b64_json，
+ * 返回的也**不一定是 PNG**（我们实测拿到的是 JPEG，响应里 data[0].output_format 会写出来）。
+ * 早先版本硬按 .png 存、data URI 硬写 image/png —— 后果有两个：
+ *   1) 文件扩展名与实际字节不符（看图工具会报错）；
+ *   2) 拿它当视频首帧时 data URI 的 MIME 是错的。
+ * 所以：以 output_format 为准，缺了就用魔数嗅探。
+ */
+function sniffImage(buf, declared) {
+  const d = String(declared || '').toLowerCase();
+  if (d.includes('jpeg') || d.includes('jpg')) return { ext: 'jpg', mime: 'image/jpeg' };
+  if (d.includes('png')) return { ext: 'png', mime: 'image/png' };
+  if (d.includes('webp')) return { ext: 'webp', mime: 'image/webp' };
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { ext: 'jpg', mime: 'image/jpeg' };
+  if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return { ext: 'png', mime: 'image/png' };
+  if (buf.length > 12 && buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return { ext: 'webp', mime: 'image/webp' };
+  return { ext: 'png', mime: 'image/png' }; // 认不出来就按 PNG 处理（旧行为）
+}
+
 async function genImage(refUri, prompt, { model, size }) {
   const body = {
     model,
@@ -443,20 +502,46 @@ async function genImage(refUri, prompt, { model, size }) {
     e.raw = r.text.slice(0, 1200);
     throw e;
   }
-  return { buf: Buffer.from(b64, 'base64'), raw: r.json };
+  const buf = Buffer.from(b64, 'base64');
+  const fmt = sniffImage(buf, r.json?.data?.[0]?.output_format);
+  return { buf, raw: r.json, ...fmt };
 }
 
 // ----------------------------------------------------------------- ② 图生视频
-/** 按 schema 组装请求体 —— 两代写法差异的唯一集中点。 */
+/** 按 schema 组装请求体 —— 两代写法差异的唯一集中点。
+ *
+ * 【2026-10-05 实测修正 1：给首帧时**不能**传 ratio】
+ *   带首帧（first-frame）生成时，服务端直接返回 400：
+ *     InvalidParameter.TaskTypeConstraint
+ *     "The parameter ratio specified in the request is not valid.
+ *      For first-frame or first-last-frame generation, the output ratio follows the first-frame image."
+ *   也就是**输出比例自动跟随首帧图**，再传 ratio 反而非法。
+ *
+ * 【2026-10-05 实测修正 2：seedance-2-5 的 i2v **不接受 camera_fixed**】
+ *   400 InvalidParameter："the specified parameter camera_fixed is not supported for
+ *   model doubao-seedance-2-5 in i2v, must be empty"。
+ *   同理 generate_audio 也不是所有 i2v 模型都认。这两个都是"锦上添花"的可选参数，
+ *   而且**镜头固定这件事我们的提示词里已经用自然语言写死了**（"镜头完全固定：不推拉、不旋转"），
+ *   所以这里一律不发，换取跨模型兼容性。
+ *
+ * 本脚本永远都带首帧（图生图得到的静帧，或 --skip-image 时的定妆图），
+ * 因此 ratio 也一律不发；ratio 形参保留只为将来做「纯文生视频」时用。
+ */
 function buildVideoBody({ model, stillUri, prompt, schema, duration, ratio = RATIO, resolution }) {
   const content = [{ type: 'image_url', image_url: { url: stillUri } }];
+  const ratioFlag = stillUri ? '' : ` --ratio ${ratio}`;
   if (schema === 'flags') {
-    const flags = ` --resolution ${resolution} --duration ${duration} --ratio ${ratio} --watermark false --camerafixed true`;
+    const flags = ` --resolution ${resolution} --duration ${duration}${ratioFlag} --watermark false`;
     content.unshift({ type: 'text', text: prompt + flags });
     return { model, content };
   }
   content.unshift({ type: 'text', text: prompt });
-  return { model, content, ratio, duration, resolution, watermark: false, camera_fixed: true, generate_audio: false };
+  // generate_audio：**不传时模型默认会合成音频**（实测任务详情里 generate_audio=true），
+  // 而桌宠素材完全用不到音轨（keyscreen 转码时 -an 直接丢掉），所以显式关掉，别为它付钱。
+  // camera_fixed 则相反：seedance-2-5 的 i2v 传了会 400，这里刻意不发。
+  const body = { model, content, duration, resolution, watermark: false, generate_audio: false };
+  if (!stillUri) body.ratio = ratio;
+  return body;
 }
 
 async function createVideo(stillUri, prompt, opts) {
@@ -602,27 +687,49 @@ function gateNames(docsFile) {
 /** 这一段现在会发什么请求（用于 dry-run 打印和花费估算）。 */
 function planFor(seg, o) {
   const mp4 = path.join(o.outRaw, `${seg.name}.mp4`);
-  const still = path.join(o.stills, `${seg.name}.png`);
-  const needVideo = o.force || !fs.existsSync(mp4);
-  const reuseStill = !o.skipImage && !o.force && fs.existsSync(still);
+  // 静帧后缀**不固定**：Ark 的图生图可能返回 JPEG（见 sniffImage 的注释），
+  // 所以判断"已存在静帧"时要按多种后缀找，否则 --force 之外的重跑会白买一张图。
+  const stillBase = path.join(o.stills, seg.name);
+  const STILL_EXTS = ['png', 'jpg', 'jpeg', 'webp'];
+  const stillFound = STILL_EXTS.map((e) => `${stillBase}.${e}`).find((f) => fs.existsSync(f));
+  const still = stillFound ?? `${stillBase}.png`;
+  // --force 只管视频产物（不牵连静帧）；--force-still 才重出静帧（并连带重建该段视频，
+  // 否则会出现"静帧换新的了、视频还是旧的"的错配）。
+  const needVideo = o.force || o.forceStill || !fs.existsSync(mp4);
+  const reuseStill = !o.skipImage && !o.forceStill && stillFound !== undefined;
   const needImage = needVideo && !o.skipImage && !reuseStill;
-  return { name: seg.name, mp4, still, needVideo, needImage, reuseStill, skipImage: o.skipImage };
+  return { name: seg.name, mp4, still, stillBase, needVideo, needImage, reuseStill, skipImage: o.skipImage };
 }
 
 function estimate(plans, o) {
   const img = plans.filter((p) => p.needVideo && p.needImage).length;
   const vid = plans.filter((p) => p.needVideo).length;
-  const yuan = img * PRICE_IMAGE_YUAN + vid * o.duration * PRICE_VIDEO_YUAN_PER_SEC;
-  return { img, vid, yuan };
+  const tokensPerVideo = estimateVideoTokens(o.resolution, o.duration);
+  const yuan = img * PRICE_IMAGE_YUAN + vid * estimateVideoYuan(o.resolution, o.duration);
+  return { img, vid, yuan, tokensPerVideo };
 }
 
 function printCost(plans, o, { title = '本次预计' } = {}) {
   const est = estimate(plans, o);
   console.log(
-    `${title} ¥${est.yuan.toFixed(2)}（图片 ${est.img} 张 × ¥${PRICE_IMAGE_YUAN} + 视频 ${est.vid} 段 × ${o.duration} 秒 × ¥${PRICE_VIDEO_YUAN_PER_SEC}/秒）`,
+    `${title} ¥${est.yuan.toFixed(2)}`
+    + `（图片 ${est.img} 张 × ¥${PRICE_IMAGE_YUAN}`
+    + ` + 视频 ${est.vid} 段 × ${o.duration} 秒 ${o.resolution} ≈ ${est.tokensPerVideo.toLocaleString()} tokens/段`
+    + ` × ¥${PRICE_VIDEO_YUAN_PER_MTOKENS}/百万tokens）`,
   );
-  console.log('  ⚠ 这是**估算，不是账单承诺**（视频真实计费常按 token 计，以方舟控制台账单为准）。');
-  console.log('    单价就在脚本顶部 PRICE_IMAGE_YUAN / PRICE_VIDEO_YUAN_PER_SEC，按你自己账号改。');
+  console.log('  ⚠ 这是**估算，不是账单承诺**。视频 token 公式 = 宽×高×帧率×时长÷1024（实测误差 <1%），');
+  console.log(`    单价 ¥${PRICE_VIDEO_YUAN_PER_MTOKENS}/百万tokens 取自 Seedance 2.0 文档；我们用的 2-5 可能更贵。以控制台账单为准。`);
+  // 预算对照表：让人一眼看出换分辨率/时长能省多少（这是最容易省错的地方）
+  const rows = [];
+  for (const res of ['480p', '720p']) {
+    for (const dur of [5, o.duration]) {
+      rows.push(`${res}/${dur}s ¥${estimateVideoYuan(res, dur).toFixed(2)}`);
+    }
+  }
+  console.log(`    单段参考：${[...new Set(rows)].join('  ·  ')}`);
+  if (o.resolution === '720p' && o.duration >= 10) {
+    console.log('    💡 提醒：素材最终只有 640×360，用 --resolution 480p 单价一样但 token 少 56%，效果几乎无差。');
+  }
   return est;
 }
 
@@ -633,7 +740,7 @@ function printPlan(segs, plans, o, models, schema) {
   console.log(`视频写法 : --schema ${schema}`);
   console.log(`并发     : ${o.concurrency}   轮询上限 ${(VIDEO_TIMEOUT_MS / 60000).toFixed(0)} 分钟/段   重试上限 ${HTTP_RETRIES}`);
   console.log(`待生成   : ${plans.length} 段（提示词包共 ${segs.length} 段）`);
-  console.log(`每段     : 视频 ${o.resolution} / ${o.duration}s / ${RATIO}${o.skipImage ? '；跳过图生图，用定妆图当首帧' : '；先图生图再图生视频'}`);
+  console.log(`每段     : 视频 ${o.resolution} / ${o.duration}s / 比例**跟随首帧**（带首帧时不能传 ratio，实测 400）${o.skipImage ? '；跳过图生图，用定妆图当首帧' : '；先图生图再图生视频'}`);
   console.log('');
   const total = plans.length;
   plans.forEach((p, i) => {
@@ -672,21 +779,36 @@ async function runProbe(o, models, refUri, sample) {
   console.log(`视频模型 : ${models.video}`);
   console.log(`模型来源 : ${models.source}`);
   console.log(`样本段   : ${sample.name}（${sample.no}）`);
-  console.log('本次预计 ¥' + (PRICE_IMAGE_YUAN + probeDuration * PRICE_VIDEO_YUAN_PER_SEC).toFixed(2) +
-    `（图片 1 张 × ¥${PRICE_IMAGE_YUAN} + 视频 1 段 × ${probeDuration} 秒 × ¥${PRICE_VIDEO_YUAN_PER_SEC}/秒）`);
-  console.log('  ⚠ 估算，不是账单承诺；首选写法被拒时会再用另一种写法建一次任务（最多多 1 段 5 秒）。\n');
+  console.log('本次预计 ¥' + (PRICE_IMAGE_YUAN + estimateVideoYuan(o.resolution, probeDuration)).toFixed(2) +
+    `（图片 1 张 × ¥${PRICE_IMAGE_YUAN} + 视频 1 段 × ${probeDuration} 秒 ${o.resolution} ≈ ${estimateVideoTokens(o.resolution, probeDuration).toLocaleString()} tokens` +
+    ` × ¥${PRICE_VIDEO_YUAN_PER_MTOKENS}/百万tokens）`);
+  console.log('  ⚠ 估算，不是账单承诺；首选写法被拒时会再用另一种写法建一次任务（最多多 1 段）。');
+  console.log('  ⚠ 注意：probe 是**先买图、再验视频模型**；视频模型 ID 不对的话那张图的钱照花。\n');
 
-  // —— ① 图生图 ——
+  // —— ① 图生图（已有探测静帧就复用：反复重探不会再重复买图）——
+  let stillUri;
+  const probeStill = ['png', 'jpg', 'jpeg', 'webp']
+    .map((e) => path.join(PROBE_DIR, `probe-still.${e}`))
+    .find((f) => fs.existsSync(f));
+  if (probeStill !== undefined && !o.force) {
+    const buf = fs.readFileSync(probeStill);
+    const f = sniffImage(buf);
+    stillUri = `data:${f.mime};base64,${buf.toString('base64')}`;
+    console.log(`① 图生图 —— ↩ 复用上次探测的静帧（省 ¥${PRICE_IMAGE_YUAN}，重探不重复扣费）`);
+    console.log(`   ${path.relative(ROOT, probeStill)}（${(buf.length / 1024).toFixed(0)} KB，${f.mime}）`);
+    console.log('   想强制重出图：加 --force\n');
+    result.image = 'reused';
+  } else {
   console.log(`① 图生图（1 张，样本：${sample.name}）`);
   console.log(`   请求：POST ${ARK_BASE}/images/generations`);
   console.log(`   请求体：${JSON.stringify({ model: models.image, size: o.imageSize, response_format: 'b64_json', watermark: false, image: '[定妆图 base64 data URI]', prompt: brief(sample.img, 60) })}`);
-  let stillUri;
   try {
-    const { buf, raw } = await genImage(refUri, sample.img, { model: models.image, size: o.imageSize });
-    const p = path.join(PROBE_DIR, 'probe-still.png');
+    const { buf, raw, ext, mime } = await genImage(refUri, sample.img, { model: models.image, size: o.imageSize });
+    const p = path.join(PROBE_DIR, `probe-still.${ext}`);
     fs.writeFileSync(p, buf);
-    stillUri = `data:image/png;base64,${buf.toString('base64')}`;
+    stillUri = `data:${mime};base64,${buf.toString('base64')}`;
     console.log(`   ✓ 成功，${(buf.length / 1024).toFixed(0)} KB → ${p}`);
+    console.log(`   实际格式：${mime}（扩展名已按真实格式写，别按 .png 找）`);
     console.log(`   响应 data[0] 字段：${Object.keys(raw.data?.[0] ?? {}).join(', ') || '(空)'}`);
     console.log(`   响应（去掉 base64 后）：${JSON.stringify(redact(raw)).slice(0, 400)}`);
     result.image = 'ok';
@@ -703,6 +825,7 @@ async function runProbe(o, models, refUri, sample) {
     console.log('\n结论写进 out/_probe/probe.json');
     process.exitCode = 1;
     return;
+  }
   }
 
   // —— ② 图生视频：先用首选 schema，被拒才试另一种 ——
@@ -880,8 +1003,13 @@ async function main() {
       console.log(`  会发 1 次图生图（${models.image}）+ 1 次图生视频（${models.video}，${Math.min(5, o.duration)} 秒）`);
       console.log(`  样本段：${work[0].name}（${work[0].no}）`);
       console.log(`  原始请求/响应会全打出来，结论写 ${PROBE_JSON} 与 ${MODELS_JSON}`);
-      console.log(`  本次预计 ¥${(PRICE_IMAGE_YUAN + Math.min(5, o.duration) * PRICE_VIDEO_YUAN_PER_SEC).toFixed(2)}` +
-        `（图片 1 张 × ¥${PRICE_IMAGE_YUAN} + 视频 1 段 × ${Math.min(5, o.duration)} 秒 × ¥${PRICE_VIDEO_YUAN_PER_SEC}/秒；估算，非账单承诺）`);
+      const pd = Math.min(5, o.duration);
+      console.log(`  本次预计 ¥${(PRICE_IMAGE_YUAN + estimateVideoYuan(o.resolution, pd)).toFixed(2)}`
+        + `（图片 1 张 × ¥${PRICE_IMAGE_YUAN} + 视频 1 段 × ${pd} 秒 ${o.resolution} ≈ ${estimateVideoTokens(o.resolution, pd).toLocaleString()} tokens`
+        + ` × ¥${PRICE_VIDEO_YUAN_PER_MTOKENS}/百万tokens；估算，非账单承诺）`);
+      // 最坏情况：首选写法被拒会再建一次任务
+      console.log(`  最坏情况 ¥${(PRICE_IMAGE_YUAN + 2 * estimateVideoYuan(o.resolution, pd)).toFixed(2)}`
+        + `（若首选写法被拒，会再用另一种写法建 1 次任务）`);
       if (!refExists) console.log('  ⚠ 定妆图还没有，真跑前要先做出来。');
       if (!API_KEY) console.log('  ⚠ ARK_API_KEY 还没设，真跑前要先设。');
       console.log('\n要真跑：node tools/gen-api.mjs --probe --go');
@@ -911,10 +1039,11 @@ async function main() {
       console.error(`✗ 拒绝直接跑全量 ${plans.length} 段（每段 = ${o.skipImage ? '0 张图' : '1 张图'} + 1 段视频，钱是真花的）。`);
     }
     console.log(`要真跑请加 --all 或 --limit N（或 --only 名字,名字）。本段结束：${o.go ? '已拒绝，未发任何请求' : '空跑，未发任何请求'}。`);
-    console.log('建议顺序：');
-    console.log('  node tools/gen-api.mjs --probe --go            # 先验模型与写法（几分钱）');
-    console.log('  node tools/gen-api.mjs --limit 2 --go          # 再跑 2 段肉眼验收');
-    console.log('  node tools/gen-api.mjs --all --go              # 确认后再全量');
+    console.log('建议顺序（省钱版）：');
+    console.log('  node tools/gen-api.mjs --probe --go                                # ① 验模型与写法');
+    console.log('  node tools/gen-api.mjs --limit 2 --resolution 480p --duration 5 --go  # ② 跑 2 段验收（约 ¥9）');
+    console.log('  node tools/gen-api.mjs --all --resolution 480p --duration 5 --go   # ③ 全量（约 ¥44）');
+    console.log('  ⚠ 不要用默认的 720p/10s 全量：那是 ¥180 级，而且素材最终只有 640×360，根本用不上。');
     process.exitCode = o.go ? 1 : 0;
     return;
   }
@@ -981,12 +1110,15 @@ async function main() {
       stillUri = refUri;
     } else {
       console.log(`${tag} … 发图（${models.image} @ ${o.imageSize}）`);
-      const { buf, raw } = await genImage(refUri, segs.find((s) => s.name === p.name).img, {
+      const { buf, raw, ext, mime } = await genImage(refUri, segs.find((s) => s.name === p.name).img, {
         model: models.image, size: o.imageSize,
       });
-      fs.writeFileSync(p.still, buf);
-      stillUri = `data:image/png;base64,${buf.toString('base64')}`;
-      console.log(`${tag} … 出图 ${(buf.length / 1024).toFixed(0)} KB → ${path.relative(ROOT, p.still)}（响应字段 ${Object.keys(raw.data?.[0] ?? {}).join(',')}）`);
+      // 按**真实格式**落盘：Ark 可能返回 JPEG，硬写 .png 会让后缀与字节不符，
+      // 而且下一步 data URI 的 MIME 也会错。sniffImage 已从 output_format / 魔数判定。
+      const stillPath = `${p.stillBase}.${ext}`;
+      fs.writeFileSync(stillPath, buf);
+      stillUri = `data:${mime};base64,${buf.toString('base64')}`;
+      console.log(`${tag} … 出图 ${(buf.length / 1024).toFixed(0)} KB → ${path.relative(ROOT, stillPath)}（格式 ${mime}，响应字段 ${Object.keys(raw.data?.[0] ?? {}).join(',')}）`);
     }
 
     // ② 建视频任务
