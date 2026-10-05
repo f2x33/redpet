@@ -1219,6 +1219,9 @@ async function runSelfTest() {
   const { spawnSync } = await import('node:child_process');
   const self = fileURLToPath(import.meta.url);
   const tmp = path.join(ROOT, 'out', '_selftest');
+  // 每个用例都从**干净的空目录**开始，否则上一次跑剩下的静帧/产物会让「调用次数」断言漂移
+  // （真踩过：第二次跑时静帧被复用，4 次调用变 3 次，用例假失败）。
+  fs.rmSync(tmp, { recursive: true, force: true });
   fs.mkdirSync(tmp, { recursive: true });
 
   let failed = 0;
@@ -1243,7 +1246,7 @@ async function runSelfTest() {
     },
     {
       name: '真跑路径（假 fetch）：出图 → 建任务 → 轮询 → 下载，且请求体符合接口约束',
-      args: ['--only', '写代码', '--force',
+      args: ['--only', '写代码', '--force', '--force-still',
         '--out-raw', path.join(tmp, 'raw'), '--stills', path.join(tmp, 'stills'),
         '--resolution', '480p', '--duration', '5', '--go'],
       expectExit: 0, minCalls: 4,
