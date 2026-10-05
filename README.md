@@ -1,4 +1,4 @@
-# dsh-redteam-pet · 红队小队员
+# dsh-redpet · 红队小队员
 
 > 网络安全红队主题的 **DeepSeek Harness 桌面宠物**。
 > 超变形 Q 版小队员：蓝色长卷发 + 呆毛、鲸鱼鳍耳与鲸鱼尾巴，一身**亮红色连体工装**，
@@ -21,20 +21,74 @@ DSH 的**命令名**和**浏览器端 UI 槽位 id 是扁平的、没有命名�
 
 | 类别 | dsh-pet 用 | **本包必须用** | 重名的后果 |
 |---|---|---|---|
-| 插件名（宿主/浏览器半侧） | `pet` | **`redteam-pet`** | 插件永不激活（`fiberPhase: null`） |
-| 命令 | `/pet` `/chat` `/balance` | **`/rpet`** **`/rchat`** **`/rpet-balance`** | `command "xxx" is already registered` → **整个 DSH 启动报错** |
-| `shell.overlay` 槽位格子 | `pet` | **`rpet`** | 两只宠物抢同一格，只显示一只 |
-| `settings.section` 区块 | `pet-config` | **`rpet-config`** | 设置页互相顶掉 |
-| 命令图标表的键 | `pet` `chat` `balance` | **`rpet`** `rchat` `rpet-balance` | 图标挂不上（键要和命令名一致） |
-| locale 命名空间 | `pet.config` | **`redteam-pet.config`** | 文案字典互相覆盖，标题串味 |
-| CSS 类名 | `pet-bub-*` | **`rpet-bub-*`** | 两边样式互相污染 |
-| CSS 变量 | `--pet-size` | **`--dsh-redteam-pet-size`**（**不要**再写 `var(--pet-size, …)` 兜底） | 尺寸被对方的值污染 |
-| 路由前缀 | `/dsh-pet-7340` | **`/dsh-redteam-pet-7340`** | 路由互相覆盖 |
-| 用户数据目录 | `$DSH_HOME/dsh-pet` | **`$DSH_HOME/dsh-redteam-pet`** | 配置/记忆串到一起 |
+| 插件名（宿主/浏览器半侧） | `pet` | **`redpet`** | 插件永不激活（`fiberPhase: null`） |
+| 命令 | `/pet` `/chat` `/balance` | **`/redpet`** **`/redchat`** **`/redpet-balance`** | `command "xxx" is already registered` → **整个 DSH 启动报错** |
+| `shell.overlay` 槽位格子 | `pet` | **`redpet`** | 两只宠物抢同一格，只显示一只 |
+| `settings.section` 区块 | `pet-config` | **`redpet-config`** | 设置页互相顶掉 |
+| 命令图标表的键 | `pet` `chat` `balance` | **`redpet`** `redchat` `redpet-balance` | 图标挂不上（键要和命令名一致） |
+| locale 命名空间 | `pet.config` | **`redpet.config`** | 文案字典互相覆盖，标题串味 |
+| CSS 类名 | `pet-bub-*` | **`redpet-bub-*`** | 两边样式互相污染 |
+| CSS 变量 | `--pet-size` | **`--dsh-redpet-size`**（**不要**再写 `var(--pet-size, …)` 兜底） | 尺寸被对方的值污染 |
+| 路由前缀 | `/dsh-pet-7340` | **`/dsh-redpet-7340`** | 路由互相覆盖 |
+| 用户数据目录 | `$DSH_HOME/dsh-pet` | **`$DSH_HOME/dsh-redpet`** | 配置/记忆串到一起 |
+| **顶层词法声明名**（浏览器 classic script 的全局作用域） | 175 个 `const`/`let`/`function` 里的 174 个 | **把整个 bundle 包进 IIFE**（见下节） | 后加载的 bundle **解析期** `SyntaxError: Identifier 'x' has already been declared` → 该插件**永远** import failed |
 
 **保险丝**：宿主半侧的三个命令注册全部走 `registerCommandSafely()`
 （`lib/index.js`）—— 万一将来又撞名，**只跳过那一个命令并打印警告，绝不让插件激活失败、更不会拖垮 DSH**。
 这条保险丝是 2026-10-05 那次「插件把 DSH 搞到起不来」事故后加的，别删。
+
+### 🔥 最隐蔽的一类：顶层词法声明名（2026-10-05 排了一整晚）
+
+上面那张表里的 10 类**全部改对了**，插件**依然**永远起不来，报错只有一句
+`dsh-redpet: import failed (see console for the import error)`。根因在表里最后那一行：
+
+**机制**：DSH 会把**同一批（batch）的多个插件 bundle 拼成一个 classic script** 下发
+（`dsh-client-modules` 的 `buildComboScript`）。classic script 的顶层
+`const` / `let` / `function` **落在全局词法作用域里**。本包是 dsh-pet 0.3.5
+**构建产物的分叉**，两份 bundle 的顶层声明名**几乎全部同名**（实测 175 个里撞 174 个：
+`pick`、`GRAVITY`、`notifyEnabled`、`refreshVisible` …）。
+
+批内顺序是 `dsh-pet` 在前、`dsh-redpet` 在后，于是：
+
+1. dsh-pet 先成功执行，把那 174 个名字占进全局；
+2. 轮到 dsh-redpet → **还停在解析阶段**就抛 `SyntaxError`，一个字节都没执行；
+3. 解析失败但 `<script>` 的 `load` 事件照样触发 → **不算 transport 失败**，不进"取不到"那条错误分支；
+4. 启动走的是 `ClientEntries.start()`，它**只调 `loader.create()`、不经过 `modules.import()`**
+   → 错误进不了 `importErrors` → 前端只能显示"see console"，而你打开 console 也未必看得出是解析错误。
+
+**为什么上一轮的"穷举审计"没抓到**：那次对比的是**字符串字面量**
+（CSS 类名 / locale 键 / 槽位键）。而这一整类冲突在**顶层词法声明名**上——
+审计维度漏了一个，所以"交集为空"的结论是错的。
+
+**诊断三连**（下次先跑这个，别再从 UI 猜）：
+
+```powershell
+# 1) 把真实 combo 抓下来，直接问它能不能解析（最快见分晓）
+node --check "$env:TEMP\combo.js"     # 报 "Identifier 'x' has already been declared" 就是本类问题
+# 2) 仓库自带回归测试：同一作用域、两种加载顺序都必须注册成功
+node tools\verify-coexist.mjs
+# 3) 确认产物已包裹
+Get-Content lib\client.js -TotalCount 2      # 应看到 /* dsh-redpet: IIFE 包裹 ... */ 和 ;(function(){
+```
+
+**修法**：把整个客户端 bundle 原样包进 IIFE（`tools/_wrap-iife.mjs`），顶层声明全部降为
+**函数作用域**。契约不变（仍是一次 `window.__ModuleLoader__.load({id, factory})`），
+原字节零改动，两种加载顺序都安全。**不加 `"use strict"`**（避免改变原产物的 `this`/静默失败语义），
+前导 `;` 独占一行（防 ASI，也防被上一个 bundle 末尾的 `//` 行注释吞掉）。
+
+**⚠️ 重新构建/再次改名后必须按序重跑**（本包没有 `src/`，`lib/*.js` 是手工维护的产物）：
+
+```powershell
+node tools\_rename2.mjs        # ① 标识统一为 redpet
+node tools\_wrap-iife.mjs      # ② IIFE 包裹（本类问题的修复）
+node tools\verify-coexist.mjs  # ③ 回归测试，必须全绿
+```
+
+**通用结论（对所有 dsh-pet 分叉都成立）**：只要一个包是从另一个已装插件的
+**构建产物**分叉出来的，就必须 IIFE 包裹，否则同批加载时必然解析冲突。
+本机 `node_modules` 里还躺着 `dsh-f2x-pet-red` 之类 junction —— **一旦启用会立刻复现同一个故障**。
+更根本的修法在上游：`dsh-client-modules` 的 `buildComboScript` 拼接时应该给**每个**插件源码
+各包一层 IIFE，这样任何第三方分叉插件都不会再撞顶层声明。
 
 
 ---
@@ -68,7 +122,7 @@ DSH 的**命令名**和**浏览器端 UI 槽位 id 是扁平的、没有命名�
 
 ### 1. 建依赖解析链接（**本机从源码目录开发时才需要**）
 
-本包放在 profile 目录**之外**（比如 `D:\...\dsh-redteam-pet`）。Node 的 ESM 解析规则是
+本包放在 profile 目录**之外**（比如 `D:\...\dsh-redpet`）。Node 的 ESM 解析规则是
 「从文件所在目录往上找 `node_modules`」，所以 `lib/index.js` 里那句
 `import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'` 永远找不到包，
 插件会以 `failed to import` 挂掉。
@@ -76,7 +130,7 @@ DSH 的**命令名**和**浏览器端 UI 槽位 id 是扁平的、没有命名�
 解法：在包目录里放一个 `node_modules`，里面 3 个 junction 指回 profile：
 
 ```
-dsh-redteam-pet\node_modules\
+dsh-redpet\node_modules\
 ├─ @deepseek-ai       -> C:\Users\<你>\.dsh\profiles\node_modules\@deepseek-ai
 ├─ @electron          -> C:\Users\<你>\.dsh\profiles\web\node_modules\@electron
 └─ @electron-internal -> C:\Users\<你>\.dsh\profiles\web\node_modules\@electron-internal
@@ -85,7 +139,7 @@ dsh-redteam-pet\node_modules\
 一条命令搞定（脚本会识别 junction 与残留目录，只摘链接、不跟进目标）：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File "D:\2.dsh\1.红队版数字人\dsh-redteam-pet\tools\fix-node-modules.ps1"
+powershell -ExecutionPolicy Bypass -File "D:\2.dsh\1.红队版数字人\dsh-redpet\tools\fix-node-modules.ps1"
 ```
 
 > 从 npm 安装（pack 后 `install_bundle` 一个 tgz）的普通用户**不需要**这一步 ——
@@ -95,7 +149,7 @@ powershell -ExecutionPolicy Bypass -File "D:\2.dsh\1.红队版数字人\dsh-redt
 
 ```powershell
 # 用 DSH 的插件管理器（会把 link: 写进 profile 的 dependencies）
-dsh plugin --profile web install D:\2.dsh\1.红队版数字人\dsh-redteam-pet
+dsh plugin --profile web install D:\2.dsh\1.红队版数字人\dsh-redpet
 ```
 
 **插件行不需要包自己插。** 本包的 `cordis.patch.yml` 是**空数组 `[]`**，插件行由
@@ -103,8 +157,8 @@ profile 用户层插入（`$DSH_HOME\profiles\web\cordis.patch.yml`）：
 
 ```yaml
 - insert:
-    - id: dsh-redteam-pet
-      name: 'dsh-redteam-pet'
+    - id: dsh-redpet
+      name: 'dsh-redpet'
 ```
 
 为什么这么绕：**bundle 层是 DSH 启动那一刻的快照**，往 `dsh.profile.bundles` 里加包必须重启；
@@ -115,8 +169,8 @@ profile 用户层插入（`$DSH_HOME\profiles\web\cordis.patch.yml`）：
 
 | 想干什么 | 怎么做 |
 |---|---|
-| 临时不显示 | 用户层加 `- id: dsh-redteam-pet` + `disabled: true`（存盘即生效） |
-| 彻底摘掉 | 删用户层那段 insert + `dsh plugin --profile web remove dsh-redteam-pet` |
+| 临时不显示 | 用户层加 `- id: dsh-redpet` + `disabled: true`（存盘即生效） |
+| 彻底摘掉 | 删用户层那段 insert + `dsh plugin --profile web remove dsh-redpet` |
 | 只隐藏不卸载 | 配置里 `"enabled": false`（本包暂用 `pets[0].display: "none"` 等价） |
 
 ### 4. 验证
@@ -132,14 +186,14 @@ node tools\verify-live.mjs
 | 检查 | 说明 |
 |---|---|
 | `/config`、`/state` 200 | 宿主半侧挂上了 |
-| `/plugins/dsh-redteam-pet/client.js` 200 | **浏览器半侧登记了** —— 这一项**只在 DSH 启动时**扫描，没有重扫入口，所以必须重启过 DSH |
+| `/plugins/dsh-redpet/client.js` 200 | **浏览器半侧登记了** —— 这一项**只在 DSH 启动时**扫描，没有重扫入口，所以必须重启过 DSH |
 | 10 段 `/thumb/main/<动作名>.webm` 200 | 并告诉你哪几段是**红队自己的素材**、哪几段还是**包内占位**（按 HTTP 返回长度与两个目录比对） |
 
 手动等价命令：
 
 ```powershell
 # 必须带 Origin，否则会被 DSH 的浏览器信任检查挡成 401
-Invoke-WebRequest "http://127.0.0.1:3080/dsh-redteam-pet-7340/config" -Headers @{Origin='http://127.0.0.1:3080'} -UseBasicParsing
+Invoke-WebRequest "http://127.0.0.1:3080/dsh-redpet-7340/config" -Headers @{Origin='http://127.0.0.1:3080'} -UseBasicParsing
 
 # 素材与池子对齐（不用起 DSH）
 node tools\selftest.mjs
@@ -166,10 +220,10 @@ out/raw/*.mp4                    绿幕原片
         ↓  node tools/keyscreen.mjs --in out/raw --out out/webm
 out/webm/*.webm                  640×360 VP9-alpha 透明视频
         ↓  node tools/pipeline.mjs        （拷进用户素材目录 + 体检）
-$DSH_HOME/dsh-redteam-pet/main-animation/webm/*.webm
+$DSH_HOME/dsh-redpet/main-animation/webm/*.webm
 ```
 
-**素材查找顺序**：`$DSH_HOME\dsh-redteam-pet\main-animation\webm\` **优先** → 包内 `assets\webm\`。
+**素材查找顺序**：`$DSH_HOME\dsh-redpet\main-animation\webm\` **优先** → 包内 `assets\webm\`。
 所以新素材、重做的素材都放用户目录，**包本身永远不用动**。
 
 > 三条铁律（踩过的坑，别再踩）：
@@ -239,8 +293,8 @@ node tools\gen-api.mjs --all --resolution 480p --duration 5 --go       # 再全�
 | 层 | 文件 | 生效方式 |
 |---|---|---|
 | 包内默认 | `assets/config.jsonc` | 改了刷新页面即可（宿主运行时读盘） |
-| 用户覆盖 | `$DSH_HOME\dsh-redteam-pet\main-config.jsonc` | 设置页保存的就是它 |
-| 记忆 | `$DSH_HOME\dsh-redteam-pet\memory.json` | 对话历史 |
+| 用户覆盖 | `$DSH_HOME\dsh-redpet\main-config.jsonc` | 设置页保存的就是它 |
+| 记忆 | `$DSH_HOME\dsh-redpet\memory.json` | 对话历史 |
 
 **合并口径：顶层字段整段替换** —— 你在用户层写了 `animations`，就必须把整个 `animations` 段写全，
 缺的子键**不会**从包内那份补回来。
@@ -263,10 +317,10 @@ node tools\gen-api.mjs --all --resolution 480p --duration 5 --go       # 再全�
 ```
 ① 生成新素材（提示词可从 dsh-pet 那份 106 段成品里挑，见文末）
 ② 抠成 640×360 VP9-alpha 的 webm，文件名 = 动作名，丢进
-   C:\Users\<你>\.dsh\dsh-redteam-pet\main-animation\webm\
+   C:\Users\<你>\.dsh\dsh-redpet\main-animation\webm\
 ③ 把动作名填进一个池子（三选一）：
    · DSH 设置页 →「红队小宠物」→ 动画池输入框      ← 最省事
-   · $DSH_HOME\dsh-redteam-pet\main-config.jsonc
+   · $DSH_HOME\dsh-redpet\main-config.jsonc
    · 包内 assets/config.jsonc（改出厂默认）
 ④ 刷新页面（Ctrl+F5）
 ```
@@ -286,11 +340,11 @@ node tools\gen-api.mjs --all --resolution 480p --duration 5 --go       # 再全�
 ## 六、目录结构
 
 ```
-dsh-redteam-pet\
+dsh-redpet\
 ├─ package.json                 包清单（name / dsh.bundle / dsh.client / peerDependencies）
 ├─ cordis.patch.yml             故意空数组 []（插件行在 profile 用户层，见第二节）
 ├─ lib\
-│  ├─ index.js                  宿主半侧：路由 /dsh-redteam-pet-7340、配置读写、会话事件、SSE 状态、碎碎念与对话
+│  ├─ index.js                  宿主半侧：路由 /dsh-redpet-7340、配置读写、会话事件、SSE 状态、碎碎念与对话
 │  ├─ client.js                 浏览器半侧：宠物渲染 + 右键菜单 + 设置页（settings.section）
 │  └─ types\                    类型声明
 ├─ assets\
@@ -320,7 +374,7 @@ dsh-redteam-pet\
 
 | 症状 | 原因 / 怎么办 |
 |---|---|
-| 页面上没有宠物，路由 404 | 插件行没挂上：确认 profile 用户层有那段 `insert`；`node_modules\dsh-redteam-pet` 的 junction 在不在 |
+| 页面上没有宠物，路由 404 | 插件行没挂上：确认 profile 用户层有那段 `insert`；`node_modules\dsh-redpet` 的 junction 在不在 |
 | 插件管理器显示 `failed to import` | 包内 `node_modules` 那 3 个 junction 丢了 → 跑 `tools\fix-node-modules.ps1` |
 | 插件管理器显示 `cannot resolve profile bundle` | profile 的 `dependencies` 里那条 `link:` 路径不对（包被搬过家）→ 重跑 `dsh plugin --profile web install <新路径>` |
 | **两只宠物** | 包 patch 和用户层**都**插了插件行 → 把 `cordis.patch.yml` 改回 `[]` |
@@ -328,9 +382,9 @@ dsh-redteam-pet\
 | 素材是透明背景但播放黑底 | VP9 alpha 只有 Chromium 内核认（Chrome/Edge/Electron）；普通播放器显示黑底是正常的 |
 | **换了素材，页面上还是旧的那段** | **最容易踩的坑。** 用户目录里的同名素材会覆盖包内素材，但**文件名没变**，而素材路由的响应头是 `cache-control: public, max-age=3600` —— 浏览器最多缓存 **1 小时**，分不出新旧。实测踩到：换成红队素材后，页面上**和直接打开素材 URL** 都还是 dsh-pet 的女仆；同一个 URL 加个 `?v=2` 立刻正常。**已修**：客户端给素材 URL 加了随每次页面加载变化的 `?v=<时间戳>`，**刷新一次即生效**。想确认服务器在传哪一份：跑 `node tools\verify-live.mjs`（按返回字节数与两个目录比对，告诉你每段用的是红队素材还是包内占位） |
 | 设置页提示「宿主半侧还没更新」 | 改了 `lib/index.js` 需要**重启 DSH**；只改 `lib/client.js` 刷新页面即可 |
-| 插件在，但页面上**看不见宠物** | 先跑 `node tools\verify-live.mjs`。⚠ **`/plugins/dsh-redteam-pet/client.js` 返回 404 不代表有问题** —— 这条路由对命令行不可达（连官方插件、甚至首页 `/` 都是 404/401），脚本会拿官方插件当对照来判断。命令行想确认：查 client 平台的 Slots 占用者，`shell.overlay` 里应有一条 `registrant=pet` 且 `active=true`。浏览器半侧只在 **DSH 启动时**扫描登记，所以首次挂载/改名后要重启 DSH |
-| 插件莫名其妙被关掉 | `dshmarket` 会把它的开关状态同步成用户层里一行裸的 `- id: dsh-redteam-pet / disabled: true`。查 `$DSH_HOME\profiles\web\.dsh-market\state.json` 的 `disabled` 列表，并删掉那一行 |
-| 启动时插件被 `dsh-safe` 隔离 | 那是"启动保险丝"：插件启动失败时它会把该行置为 disabled（记在 `$DSH_HOME\dsh-safe\quarantine.json`）。修好插件后：`dsh-safe restore --profile web --id dsh-redteam-pet` |
+| 插件在，但页面上**看不见宠物** | 先跑 `node tools\verify-live.mjs`。⚠ **`/plugins/dsh-redpet/client.js` 返回 404 不代表有问题** —— 这条路由对命令行不可达（连官方插件、甚至首页 `/` 都是 404/401），脚本会拿官方插件当对照来判断。命令行想确认：查 client 平台的 Slots 占用者，`shell.overlay` 里应有一条 `registrant=pet` 且 `active=true`。浏览器半侧只在 **DSH 启动时**扫描登记，所以首次挂载/改名后要重启 DSH |
+| 插件莫名其妙被关掉 | `dshmarket` 会把它的开关状态同步成用户层里一行裸的 `- id: dsh-redpet / disabled: true`。查 `$DSH_HOME\profiles\web\.dsh-market\state.json` 的 `disabled` 列表，并删掉那一行 |
+| 启动时插件被 `dsh-safe` 隔离 | 那是"启动保险丝"：插件启动失败时它会把该行置为 disabled（记在 `$DSH_HOME\dsh-safe\quarantine.json`）。修好插件后：`dsh-safe restore --profile web --id dsh-redpet` |
 | 跑 `pipeline`/`keyscreen` 时看到 `⚠ 首选 ffmpeg 不能做 VP9-alpha` | **正常现象**：本机 PATH 上那个 ffmpeg（剪映/IDE 自带的）没有 `libvpx-vp9` 编码器，脚本自动换用兜底候选。脚本退出码仍是 **0**；想固定用哪个就设 `$env:FFMPEG` |
 | 改了 `cordis.patch.yml` 但没生效 | 加载器的实时重载偶尔会卡在 `previous operation is still pending`（反复快速改文件容易触发）→ **重启 DSH** |
 

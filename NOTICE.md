@@ -2,7 +2,7 @@
 
 ## 一、本项目的血统
 
-`dsh-redteam-pet` 的**代码**（宿主半侧 `lib/index.js`、浏览器半侧 `lib/client.js`、
+`dsh-redpet` 的**代码**（宿主半侧 `lib/index.js`、浏览器半侧 `lib/client.js`、
 桌面模式运行时 `runtime/electron-helper/`）是从 **dsh-pet `0.3.5`** 的构建产物改造而来。
 
 - 上游项目：dsh-pet（"吃白饭的蓝色大肥鱼"）
@@ -16,8 +16,8 @@ MIT 允许修改、再分发与再许可，条件是**保留原版权声明与�
 
 | 类别 | 改动 |
 |---|---|
-| 标识 | 全局把 `dsh-pet` 改名为 `dsh-redteam-pet`：包名、bundle patch 的 id、路由前缀 `/dsh-pet-7340` → `/dsh-redteam-pet-7340`、用户数据目录 `$DSH_HOME/dsh-pet` → `$DSH_HOME/dsh-redteam-pet`、CSS 类名前缀、settings 槽位键、日志前缀 |
-| 插件身份 | Cordis 插件名 `pet` → `redteam-pet`（与 dsh-pet 并存时不撞名） |
+| 标识 | 全局把 `dsh-pet` 改名为 `dsh-redpet`：包名、bundle patch 的 id、路由前缀 `/dsh-pet-7340` → `/dsh-redpet-7340`、用户数据目录 `$DSH_HOME/dsh-pet` → `$DSH_HOME/dsh-redpet`、CSS 类名前缀、settings 槽位键、日志前缀 |
+| 插件身份 | Cordis 插件名 `pet` → `redpet`（与 dsh-pet 并存时不撞名） |
 | 动作 | **106 个精简到 10 个**：`assets/config.jsonc` 的 `animations` 段重写（池子、权重、事件档位全部按 10 个素材重排） |
 | 人设 | `whisperPrompt`、`workStatusTexts`（6 档）换成网络安全红队语境 |
 | 素材 | 包内只保留 10 段；另有 `docs/01`、`docs/02` 两套提示词用于生成红队自己的素材 |

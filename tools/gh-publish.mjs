@@ -20,7 +20,7 @@
 //
 // 【环境变量】
 //   GH_TOKEN   GitHub 令牌（必填）
-//   GH_REPO    默认 f2x33/redteam-pet
+//   GH_REPO    默认 f2x33/redpet
 //   GH_BRANCH  默认 main
 //   GH_LIST    文件清单路径（默认 out/_gh-files.txt）
 //   GH_MSG     提交说明文件（默认 out/_gh-msg.txt，缺省用内置文案）
@@ -38,7 +38,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
 const TOKEN = process.env.GH_TOKEN || '';
-const REPO = process.env.GH_REPO || 'f2x33/redteam-pet';
+const REPO = process.env.GH_REPO || 'f2x33/redpet';
 const BRANCH = process.env.GH_BRANCH || 'main';
 const LIST = process.env.GH_LIST || path.join(ROOT, 'out', '_gh-files.txt');
 const MSG_FILE = process.env.GH_MSG || path.join(ROOT, 'out', '_gh-msg.txt');

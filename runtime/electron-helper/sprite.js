@@ -1,5 +1,5 @@
 /**
- * dsh-redteam-pet desktop helper —— 宠物本体（PetSprite 类）。
+ * dsh-redpet desktop helper —— 宠物本体（PetSprite 类）。
  *
  * 播放 / 拖拽抛掷 / 跨窗碰撞 / 点击穿透 / 右键菜单 / 聊天弹窗 / 气泡渲染。
  * 事件联动（余额 / 碎碎念 / 广播 / 工作状态）不在此文件——见 events.js。
@@ -22,7 +22,7 @@ class PetSprite {
     this.bottomPad = (this.size * (9 / 16) * (S.CANVAS_H - S.FEET_Y)) / S.CANVAS_H;
     // 窗口高 = 舞台高 + 脚底垫高（stage 被 translateY(bottomPad) 下移的余量，防底部被窗口裁剪）
     this.winH = this.height + this.bottomPad;
-    // 窗口内【可交互区域】= 身体命中区（像素，窗口坐标）。浏览器 overlay 只有 .dsh-redteam-pet-hit 是
+    // 窗口内【可交互区域】= 身体命中区（像素，窗口坐标）。浏览器 overlay 只有 .dsh-redpet-hit 是
     // pointer-events:auto（root/stage/气泡全 none）——桌面严格对齐：命中区外含透明像素一律穿透到下层应用。
     // HIT_BOX 是 640×360 舞台坐标：x 按窗口宽缩放；y 除舞台高外还要加 bottomPad（舞台被下移）。
     this.hitRect = {
@@ -355,7 +355,7 @@ class PetSprite {
     const loadGuard = (why) => {
       if (!this.pending || this.pending.gen !== gen) return;
       this.pending = null;
-      console.warn('[dsh-redteam-pet] 素材加载失败 pet=' + this.pet.id + ' anim=' + next + '：' + why + '（已释放本次切换）');
+      console.warn('[dsh-redpet] 素材加载失败 pet=' + this.pet.id + ' anim=' + next + '：' + why + '（已释放本次切换）');
     };
     const loadTimer = window.setTimeout(() => loadGuard('10s 超时'), 10000);
     el.onerror = () => {
@@ -442,7 +442,7 @@ class PetSprite {
       const nextWork = nonTerminal ? S.nextWorkStatusAnim(animations.events?.workStatus ?? [], this.anim) : null;
       if (nextWork !== null) {
         console.log(
-          '[dsh-redteam-pet] ' +
+          '[dsh-redpet] ' +
             new Date().toTimeString().slice(0, 8) +
             ' pet=' +
             this.pet.id +
@@ -485,7 +485,7 @@ class PetSprite {
     if (slot === undefined) return false;
     const name = S.pickSlot(slot, this.anim); // 避开当前正播动画（避免连续重复）
     console.log(
-      '[dsh-redteam-pet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + this.pet.id + ' 恢复工作状态动画: ' + name,
+      '[dsh-redpet] ' + new Date().toTimeString().slice(0, 8) + ' pet=' + this.pet.id + ' 恢复工作状态动画: ' + name,
     );
     const rotating = Array.isArray(slot) && slot.length > 1;
     if (rotating)
@@ -754,7 +754,7 @@ class PetSprite {
     // 抓取速度日志：stopThrow 之前读，否则飞行速度就没了；静止时记录 0（与浏览器同构）
     const grabState = this.throwState;
     console.log(
-      '[dsh-redteam-pet] ' +
+      '[dsh-redpet] ' +
         new Date().toTimeString().slice(0, 8) +
         ' pet=' +
         this.pet.id +
@@ -774,7 +774,7 @@ class PetSprite {
       if (grabSpeed >= S.SCORE_MIN_SPEED) {
         this.pressScoreFired = true;
         console.log(
-          '[dsh-redteam-pet] ' +
+          '[dsh-redpet] ' +
             new Date().toTimeString().slice(0, 8) +
             ' pet=' +
             this.pet.id +
@@ -891,7 +891,7 @@ class PetSprite {
       this.dragTrail = [];
       if (vel) {
         console.log(
-          '[dsh-redteam-pet] ' +
+          '[dsh-redpet] ' +
             new Date().toTimeString().slice(0, 8) +
             ' pet=' +
             this.pet.id +
@@ -1117,11 +1117,11 @@ class PetSprite {
     if (!this.pet.balanceEnabled) return;
     S.postAction(BALANCE_URL)
       .then((ok) => {
-        if (!ok) console.warn('[dsh-redteam-pet] 菜单查看余额：刷新动作未成功');
+        if (!ok) console.warn('[dsh-redpet] 菜单查看余额：刷新动作未成功');
         pollStateNow(); // 立即拉一拍：结果 0 延迟可见（失败也会由 /state 里的 ok:false 弹文字说明）
       })
       .catch((e) => {
-        console.error('[dsh-redteam-pet] 菜单查看余额异常', e);
+        console.error('[dsh-redpet] 菜单查看余额异常', e);
       });
   }
 
@@ -1131,11 +1131,11 @@ class PetSprite {
   showWhisperFromMenu() {
     S.postAction(WHISPER_URL + '?pet=' + encodeURIComponent(this.pet.id))
       .then((ok) => {
-        if (!ok) console.warn('[dsh-redteam-pet] 菜单碎碎念：生成动作未成功 pet=' + this.pet.id);
+        if (!ok) console.warn('[dsh-redpet] 菜单碎碎念：生成动作未成功 pet=' + this.pet.id);
         pollStateNow(); // 立即拉一拍：文本随这一拍到达并展示
       })
       .catch((e) => {
-        console.warn('[dsh-redteam-pet] 菜单碎碎念异常', e);
+        console.warn('[dsh-redpet] 菜单碎碎念异常', e);
       });
   }
 
@@ -1160,7 +1160,7 @@ class PetSprite {
       clamp: this.visibleClampRect(),
       onSent: () => {
         // 发送成功：回复已写进 S，立刻跑一拍 /state 让气泡 0 延迟出现（不必等下一个 1s）
-        console.info('[dsh-redteam-pet] 对话已发送 pet=' + this.pet.id);
+        console.info('[dsh-redpet] 对话已发送 pet=' + this.pet.id);
         pollStateNow();
       },
       onClose: () => {
@@ -1195,7 +1195,7 @@ class PetSprite {
   // 故不 await、不重试，失败只记日志——重载本身就是把本进程换掉。
   reloadDesktop() {
     fetch(BASE + '/reload', { method: 'POST' }).catch((e) => {
-      console.warn('[dsh-redteam-pet] 重载配置请求失败（宿主不可达？）', e);
+      console.warn('[dsh-redpet] 重载配置请求失败（宿主不可达？）', e);
     });
   }
 

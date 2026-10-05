@@ -5,7 +5,7 @@
 //   ① 生成（可选，要 --gen）  调 gen-api.mjs —— 花钱的那一步，**必须再给 --go**
 //   ② 抠像                    调 keyscreen.mjs —— 绿幕 → VP9-alpha webm（640×360）
 //   ③ 装进插件                把 out/webm/*.webm 拷到
-//                             $DSH_HOME\dsh-redteam-pet\main-animation\webm\
+//                             $DSH_HOME\dsh-redpet\main-animation\webm\
 //                             （用户素材目录，同名**覆盖**包内 assets/webm 的素材）
 //   ④ 体检                    文件名 / 编码 / 尺寸 / alpha / 缺哪段 → 打一张对照表
 //
@@ -50,7 +50,7 @@ const OUT_RAW = path.join(ROOT, 'out', 'raw');
 const OUT_WEBM = path.join(ROOT, 'out', 'webm');
 const PKG_WEBM = path.join(ROOT, 'assets', 'webm');            // 包内素材（只读参考）
 const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
-const USER_WEBM = path.join(DSH_HOME, 'dsh-redteam-pet', 'main-animation', 'webm'); // 用户素材目录
+const USER_WEBM = path.join(DSH_HOME, 'dsh-redpet', 'main-animation', 'webm'); // 用户素材目录
 
 const HELP = `pipeline.mjs —— 红队桌宠素材流水线（生成 → 抠像 → 装进插件 → 体检）
 
@@ -74,7 +74,7 @@ const HELP = `pipeline.mjs —— 红队桌宠素材流水线（生成 → 抠�
   --skip-verify       跳过体检步骤
   --help, -h          显示本帮助
 
-装包目标：$DSH_HOME\\dsh-redteam-pet\\main-animation\\webm\\（$DSH_HOME 默认 %USERPROFILE%\\.dsh）
+装包目标：$DSH_HOME\\dsh-redpet\\main-animation\\webm\\（$DSH_HOME 默认 %USERPROFILE%\\.dsh）
   同名文件覆盖包内 assets/webm 里的素材，所以以后换素材只要重跑本脚本，不用动插件包。
   本脚本**不会**改 assets/config.jsonc。`;
 

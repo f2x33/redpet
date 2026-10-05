@@ -1,5 +1,5 @@
 /**
- * dsh-redteam-pet desktop helper —— Electron 主进程
+ * dsh-redpet desktop helper —— Electron 主进程
  *
  * 职责：为**每只桌面宠物**开一个独立的局部小窗口（透明、置顶、不可激活），
  * 窗口 = 宠物包围盒 + 四周外扩余量（renderer 的 WINDOW_MARGIN_RATIO，为气泡/弹窗预留空间），
@@ -15,11 +15,11 @@
  * 同时发生的事，混成了一个自变量。）
  * 输入：窗口默认**整窗点击穿透**（setIgnoreMouseEvents(true,{forward:true})），渲染端在光标
  * 进/出宠物身体命中区时经 pet:set-interactive 翻转可交互——透明像素不挡下层应用，
- * 与浏览器 overlay（仅 .dsh-redteam-pet-hit 可交互）严格对齐。
+ * 与浏览器 overlay（仅 .dsh-redpet-hit 可交互）严格对齐。
  *
  * 数据通道（bridge 模式，DSH_PET_BRIDGE=1 由宿主注入）：
  * 渲染端不再直连宿主 WebServer（DSH Desktop 2.0.3+ 的浏览器访问闸门会拦无令牌裸 HTTP）——
- * 本进程注册自定义 scheme `dsh-redteam-pet-bridge://`，protocol.handle 收到渲染端请求后
+ * 本进程注册自定义 scheme `dsh-redpet-bridge://`，protocol.handle 收到渲染端请求后
  * 经 stdin/stdout JSON 行协议转发宿主（helper-process.ts 的 BridgeHandler），
  * 宿主用与 HTTP 路由同一份 handlePetRoute 应答；素材应答带文件绝对路径，本进程读盘返回。
  * 无 DSH_PET_BRIDGE（手动 start-desktop / 开发流）时保持旧路径：渲染端直接 HTTP 访问宿主。
@@ -36,7 +36,7 @@ try {
   electronApi = require('electron');
 } catch (error) {
   process.stderr.write(
-    '[dsh-redteam-pet helper] 启动失败：本进程被以「纯 Node 模式」拉起（ELECTRON_RUN_AS_NODE=' +
+    '[dsh-redpet helper] 启动失败：本进程被以「纯 Node 模式」拉起（ELECTRON_RUN_AS_NODE=' +
       JSON.stringify(process.env.ELECTRON_RUN_AS_NODE ?? null) +
       '）。该变量必须在 spawn 前删除（见 src/host/helper-process.ts 的 helperSpawnEnv），' +
       '运行期再删无效，设成空串会让 Electron 直接 abort。原始错误：' +
@@ -61,12 +61,12 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 // 显式定名：Helper 是被 `electron.exe <main.js>` 直接拉起的，Electron 取不到 app 名会回落成
 // "Electron"，userData 便落到 %APPDATA%\Electron —— 那是所有这么跑的 Electron 脚本的公共目录，
 // 我们的 DPI 缓存与 Chromium profile 都会和别人混在一起。必须赶在任何 getPath('userData') 之前设。
-app.setName('dsh-redteam-pet-electron-helper');
+app.setName('dsh-redpet-electron-helper');
 
 /** DPI 探测子进程模式：不建窗口，只把主屏 scaleFactor 打到 stdout 就退出（见 probePrimaryScale） */
 const DPI_PROBE = process.env.DSH_PET_DPI_PROBE === '1';
 /** 探测进程的输出标记（父进程按它抓值） */
-const DPI_MARK = 'dsh-redteam-pet-primary-scale:';
+const DPI_MARK = 'dsh-redpet-primary-scale:';
 
 // ---------- 宿主存活（issue #56）：管道断开 / 父进程消失 → 自己退出 ----------
 //
@@ -170,7 +170,7 @@ function writeCachedPrimaryScale(value) {
   try {
     writeFileSync(dpiCacheFile(), JSON.stringify({ scaleFactor: value }), 'utf8');
   } catch (e) {
-    console.error('[dsh-redteam-pet-desktop-helper] write dpi cache failed:', String(e && e.message ? e.message : e));
+    console.error('[dsh-redpet-desktop-helper] write dpi cache failed:', String(e && e.message ? e.message : e));
   }
 }
 
@@ -192,7 +192,7 @@ function probePrimaryScale() {
   };
   let out = '';
   try {
-    out = execFileSync(process.execPath, [__filename, '--dsh-redteam-pet-dpi-probe'], opts);
+    out = execFileSync(process.execPath, [__filename, '--dsh-redpet-dpi-probe'], opts);
   } catch (e) {
     // 只认 stdout，不认退出码：一个不开窗口的 Electron 进程调 app.exit() 在 Windows 上
     // 偶发 0xC0000005（退出期访问违例），但那时值早就写出来了，丢掉它纯属浪费一次冷启动。
@@ -205,7 +205,7 @@ function probePrimaryScale() {
         .filter(Boolean)
         .join(' ');
       console.error(
-        '[dsh-redteam-pet-desktop-helper] dpi probe failed:',
+        '[dsh-redpet-desktop-helper] dpi probe failed:',
         String(e && e.message ? e.message : e).split('\n')[0],
         detail,
       );
@@ -240,17 +240,17 @@ function petScale() {
   return FORCED_SCALE > 0 && PRIMARY_SCALE > 0 ? base * (PRIMARY_SCALE / FORCED_SCALE) : base;
 }
 
-/** bridge 模式：DSH_PET_BRIDGE=1（宿主注入）。开启时注册 dsh-redteam-pet-bridge scheme + 管道转发 */
+/** bridge 模式：DSH_PET_BRIDGE=1（宿主注入）。开启时注册 dsh-redpet-bridge scheme + 管道转发 */
 const BRIDGE = process.env.DSH_PET_BRIDGE === '1';
 /** 协议行前缀（与 helper-process.ts 的 BRIDGE_PREFIX 一致） */
-const BRIDGE_PREFIX = 'dsh-redteam-pet-bridge:';
+const BRIDGE_PREFIX = 'dsh-redpet-bridge:';
 
 if (BRIDGE) {
   // 自定义 scheme：standard（可解析 URL）+ secure（按 https 对待）+ supportFetchAPI（fetch 可用）
   // + stream（视频流）+ corsEnabled（让 CORS 规则生效，配合响应里的 ACAO 头放行 file:// 源页面）
   protocol.registerSchemesAsPrivileged([
     {
-      scheme: 'dsh-redteam-pet-bridge',
+      scheme: 'dsh-redpet-bridge',
       privileges: {
         standard: true,
         secure: true,
@@ -402,7 +402,7 @@ function deskGeometry() {
 function createPetWindows() {
   const geo = deskGeometry();
   const area = geo.hull;
-  const configUrl = process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-redteam-pet-7340/config';
+  const configUrl = process.env.DSH_PET_CONFIG_URL || 'http://127.0.0.1:3080/dsh-redpet-7340/config';
   const pets = petsFromEnv();
   const scale = petScale();
   for (const pet of pets) {
@@ -504,7 +504,7 @@ function createPetWindows() {
         },
       })
       .catch((error) => {
-        console.error(`[dsh-redteam-pet-desktop-helper] page load failed (${pet.id}):`, error);
+        console.error(`[dsh-redpet-desktop-helper] page load failed (${pet.id}):`, error);
         win.destroy();
       });
     windows.set(pet.id, win);
@@ -512,7 +512,7 @@ function createPetWindows() {
 }
 
 // ---------- bridge 协议（渲染端 custom scheme → 本进程 → 宿主 stdout JSON 行 + 本地回调） ----------
-// 渲染端的每个 fetch 都落到 dsh-redteam-pet-bridge://，protocol.handle 把请求以一行 JSON 写 stdout 转发宿主。
+// 渲染端的每个 fetch 都落到 dsh-redpet-bridge://，protocol.handle 把请求以一行 JSON 写 stdout 转发宿主。
 // 宿主应答**不走近 0 号管道**：Electron 主进程在 Windows 上收不到 piped stdin（electron#4218），
 // 所以本进程开一个 127.0.0.1 随机端口 HTTP 回调（DSH 闸门只拦 DSH WebServer 路由，管不到这里）；
 // 请求行携带回调 URL，宿主处理完 POST 应答回来，按 id 唤醒等待中的请求。
@@ -554,7 +554,7 @@ function startBridgeCallback() {
   const server = http.createServer((req, res) => {
     if (req.method !== 'POST' || req.url !== '/respond') {
       res.writeHead(404, { 'content-type': 'text/plain' });
-      res.end('dsh-redteam-pet: not found');
+      res.end('dsh-redpet: not found');
       return;
     }
     let raw = '';
@@ -566,28 +566,28 @@ function startBridgeCallback() {
         res.end('ok');
       } catch {
         res.writeHead(400, { 'content-type': 'text/plain' });
-        res.end('dsh-redteam-pet: bad payload');
+        res.end('dsh-redpet: bad payload');
       }
     });
     req.on('error', () => {
       res.writeHead(400, { 'content-type': 'text/plain' });
-      res.end('dsh-redteam-pet: bad payload');
+      res.end('dsh-redpet: bad payload');
     });
   });
   server.on('error', (e) => {
-    console.error('[dsh-redteam-pet-desktop-helper] bridge callback server error:', String(e && e.message ? e.message : e));
+    console.error('[dsh-redpet-desktop-helper] bridge callback server error:', String(e && e.message ? e.message : e));
   });
   server.listen(0, '127.0.0.1', () => {
     const addr = server.address();
     bridgeCallbackUrl = 'http://127.0.0.1:' + (addr && typeof addr === 'object' ? addr.port : 0) + '/respond';
-    console.error('[dsh-redteam-pet-desktop-helper] bridge callback: ' + bridgeCallbackUrl);
+    console.error('[dsh-redpet-desktop-helper] bridge callback: ' + bridgeCallbackUrl);
   });
   return server;
 }
 
 /** 处理一个渲染端请求：拼宿主请求行 → 等应答 → 组装 Response（素材读盘） */
 async function handleBridgeRequest(request) {
-  const url = new URL(request.url); // dsh-redteam-pet-bridge://dsh-redteam-pet/dsh-redteam-pet-7340/...
+  const url = new URL(request.url); // dsh-redpet-bridge://dsh-redpet/dsh-redpet-7340/...
   const method = request.method || 'GET';
   let body;
   if (method === 'POST' || method === 'PUT') {
@@ -602,8 +602,8 @@ async function handleBridgeRequest(request) {
       const data = await fsPromises.readFile(resp.file);
       return new Response(new Uint8Array(data), { status: resp.status || 200, headers });
     } catch (e) {
-      console.error('[dsh-redteam-pet-desktop-helper] bridge file read failed:', resp.file, e);
-      return new Response('dsh-redteam-pet: asset read failed', { status: 500, headers });
+      console.error('[dsh-redpet-desktop-helper] bridge file read failed:', resp.file, e);
+      return new Response('dsh-redpet: asset read failed', { status: 500, headers });
     }
   }
   return new Response(resp.body ?? '', { status: resp.status || 200, headers });
@@ -618,7 +618,7 @@ app.whenReady().then(() => {
     return;
   }
   console.error(
-    '[dsh-redteam-pet-desktop-helper] displays: ' +
+    '[dsh-redpet-desktop-helper] displays: ' +
       JSON.stringify(deskGeometry()) +
       ' forcedScaleFactor=' +
       (FORCED_SCALE || 'off') +
@@ -630,10 +630,10 @@ app.whenReady().then(() => {
 
   if (BRIDGE) {
     // 自定义 scheme 接住渲染端全部请求（配置/余额/碎碎念/广播/素材）
-    protocol.handle('dsh-redteam-pet-bridge', (request) =>
+    protocol.handle('dsh-redpet-bridge', (request) =>
       handleBridgeRequest(request).catch((e) => {
-        console.error('[dsh-redteam-pet-desktop-helper] bridge handler error:', String(e && e.message ? e.message : e));
-        return new Response('dsh-redteam-pet: bridge error', {
+        console.error('[dsh-redpet-desktop-helper] bridge handler error:', String(e && e.message ? e.message : e));
+        return new Response('dsh-redpet: bridge error', {
           status: 502,
           headers: { 'access-control-allow-origin': '*' },
         });
@@ -739,7 +739,7 @@ app.whenReady().then(() => {
     const url = payload && typeof payload === 'object' ? String(payload.url || '') : '';
     if (!/^https?:[/][/]/.test(url)) return;
     shell.openExternal(url).catch((error) => {
-      console.error('[dsh-redteam-pet-desktop-helper] openExternal failed:', error);
+      console.error('[dsh-redpet-desktop-helper] openExternal failed:', error);
     });
   });
 
@@ -753,7 +753,7 @@ app.whenReady().then(() => {
     for (const win of windows.values()) {
       if (!win.isDestroyed()) win.webContents.send('pet:displays', geo);
     }
-    console.error('[dsh-redteam-pet-desktop-helper] displays changed: ' + JSON.stringify(geo));
+    console.error('[dsh-redpet-desktop-helper] displays changed: ' + JSON.stringify(geo));
     // 主屏缩放可能一起变了（它决定宠物的尺寸补偿）。线性化生效期间 screen API 只报被强制的值，
     // 真实值只能靠探测子进程拿；不一致就刷新缓存，下次启动自动用上。
     if (FORCED_SCALE > 0) {
@@ -761,7 +761,7 @@ app.whenReady().then(() => {
         const real = probePrimaryScale();
         if (real > 0 && Math.abs(real - PRIMARY_SCALE) > 1e-6) {
           console.error(
-            '[dsh-redteam-pet-desktop-helper] primary scaleFactor changed ' +
+            '[dsh-redpet-desktop-helper] primary scaleFactor changed ' +
               PRIMARY_SCALE +
               ' -> ' +
               real +
@@ -786,7 +786,7 @@ app.whenReady().then(() => {
   // 冒烟自检模式（默认关闭）：DSH_PET_SMOKE=1 时延时截图到 DSH_PET_SMOKE_OUT 后退出，
   // 用于验证窗口/渲染/动画链路（如 CI 或本地验证）。
   if (process.env.DSH_PET_SMOKE === '1') {
-    const smokeOut = process.env.DSH_PET_SMOKE_OUT || path.join(app.getPath('temp'), 'dsh-redteam-pet-smoke.png');
+    const smokeOut = process.env.DSH_PET_SMOKE_OUT || path.join(app.getPath('temp'), 'dsh-redpet-smoke.png');
     const afterMs = Number(process.env.DSH_PET_SMOKE_AFTER_MS || 9000);
     const target = windows.values().next().value;
     if (target) {
@@ -903,7 +903,7 @@ app.whenReady().then(() => {
               } catch (err) {
                 return { threw: String(err), menuMounted: false };
               }
-              var menu = document.querySelector('.dsh-redteam-pet-menu');
+              var menu = document.querySelector('.dsh-redpet-menu');
               var out = {
                 threw: null,
                 menuMounted: !!menu,
@@ -912,11 +912,11 @@ app.whenReady().then(() => {
                 errsNew: (d.errors || []).length - errsBefore,
               };
               if (menu) {
-                var branch = menu.querySelector('.dsh-redteam-pet-menu-branch');
+                var branch = menu.querySelector('.dsh-redpet-menu-branch');
                 if (branch) {
                   branch.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, relatedTarget: menu }));
                   var panels = Array.prototype.slice.call(
-                    menu.querySelectorAll('.dsh-redteam-pet-menu-column'),
+                    menu.querySelectorAll('.dsh-redpet-menu-column'),
                   );
                   var visible = function () {
                     return panels.filter(function (p) {
@@ -930,7 +930,7 @@ app.whenReady().then(() => {
                     return p !== panels[0];
                   })[0];
                   if (panel1) {
-                    var cat = panel1.querySelector('.dsh-redteam-pet-menu-branch');
+                    var cat = panel1.querySelector('.dsh-redpet-menu-branch');
                     if (cat) {
                       cat.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false, relatedTarget: panel1 }));
                       await new Promise(function (resolve) {
@@ -969,14 +969,14 @@ app.whenReady().then(() => {
             })(),
           }))()`);
           console.log(
-            '[dsh-redteam-pet-desktop-helper] smoke dump: windows=' +
+            '[dsh-redpet-desktop-helper] smoke dump: windows=' +
               windows.size +
               ' ids=' +
               JSON.stringify([...windows.keys()]) +
               ' => ' +
               JSON.stringify(dump),
           );
-          console.log('[dsh-redteam-pet-desktop-helper] smoke bounds:', JSON.stringify(first.getContentBounds()));
+          console.log('[dsh-redpet-desktop-helper] smoke bounds:', JSON.stringify(first.getContentBounds()));
           // 点击穿透 round-trip：setInteractive(true)→窗口捕获输入（忽略鼠标=false）；
           // setInteractive(false)→恢复整窗穿透（忽略鼠标=true）。状态取自主进程镜像 windowIgnore。
           // 期间暂停兜底轮询：它按真实光标位置翻转，冒烟时鼠标不在宠物身上会覆盖本断言的状态。
@@ -989,15 +989,15 @@ app.whenReady().then(() => {
           const passthroughIgnoring = windowIgnore.get(first.id);
           pointerFallbackPaused = false;
           console.log(
-            '[dsh-redteam-pet-desktop-helper] smoke interactive round-trip:',
+            '[dsh-redpet-desktop-helper] smoke interactive round-trip:',
             JSON.stringify({ interactiveIgnoring, passthroughIgnoring }),
           );
           const image = await first.webContents.capturePage();
           writeFileSync(smokeOut, image.toPNG());
-          console.log('[dsh-redteam-pet-desktop-helper] smoke capture:', smokeOut);
+          console.log('[dsh-redpet-desktop-helper] smoke capture:', smokeOut);
         }
       } catch (error) {
-        console.error('[dsh-redteam-pet-desktop-helper] smoke capture failed:', error);
+        console.error('[dsh-redpet-desktop-helper] smoke capture failed:', error);
       }
       setTimeout(() => app.quit(), 500);
     }, afterMs);

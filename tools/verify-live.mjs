@@ -3,7 +3,7 @@
 // ============================================================================
 // 用途：插件挂进 DSH 之后，一次性确认三件事都真的通了：
 //   ① 宿主半侧挂载了（/config、/state 返回 200）
-//   ② 浏览器半侧登记了（/plugins/dsh-redteam-pet/client.js 返回 200）
+//   ② 浏览器半侧登记了（/plugins/dsh-redpet/client.js 返回 200）
 //      —— 这一项**必须 DSH 重启过**才会有：dsh-client-modules 的扫描只在启动时跑，
 //         源码注释写着 "Scanning is incremental per package — there is no full-rescan code path"
 //   ③ 10 段素材都能取到，并且**哪几段已经是红队自己的、哪几段还是包内占位**一目了然
@@ -26,7 +26,7 @@ const ROOT = path.resolve(HERE, '..');
 const args = process.argv.slice(2);
 const originArg = args.indexOf('--origin');
 const ORIGIN = originArg >= 0 ? args[originArg + 1] : 'http://127.0.0.1:3080';
-const ROUTE = '/dsh-redteam-pet-7340';
+const ROUTE = '/dsh-redpet-7340';
 // 必须带 Origin，否则会被 DSH 的浏览器信任检查挡成 401
 const HEADERS = { Origin: ORIGIN };
 
@@ -45,7 +45,7 @@ async function probe(urlPath) {
   }
 }
 
-console.log('\n=== dsh-redteam-pet 在线验收 ===');
+console.log('\n=== dsh-redpet 在线验收 ===');
 console.log(`地址：${ORIGIN}${ROUTE}\n`);
 
 // ---- ① 宿主半侧 ------------------------------------------------------------
@@ -78,10 +78,10 @@ for (const p of ['/state', '/config/meta']) {
 //     对照 200 而我们 404 → 那才是真的没登记
 console.log('\n[2/3] 浏览器半侧登记');
 const CONTROL_URL = '/plugins/dshmarket/client.js'; // 已知客户端插件，用作可达性对照
-const cli = await probe('/plugins/dsh-redteam-pet/client.js');
+const cli = await probe('/plugins/dsh-redpet/client.js');
 const ctrl = await probe(CONTROL_URL);
 if (cli.status === 200) {
-  ok(`/plugins/dsh-redteam-pet/client.js  200（${cli.len} bytes）—— 页面上应该能看到宠物了`);
+  ok(`/plugins/dsh-redpet/client.js  200（${cli.len} bytes）—— 页面上应该能看到宠物了`);
 } else if (cli.status === 404 && ctrl.status === 404) {
   clientInconclusive = true;
   warn(`client.js 404 —— 但对照组 ${CONTROL_URL} 也是 404，说明这条路由**命令行不可达**，本项无法判定`);
@@ -103,7 +103,7 @@ try {
   bad(`读不到配置里的动作名：${e.message}`);
 }
 const userDir = path.join(process.env.DSH_HOME ?? path.join(process.env.USERPROFILE ?? '', '.dsh'),
-  'dsh-redteam-pet', 'main-animation', 'webm');
+  'dsh-redpet', 'main-animation', 'webm');
 const pkgDir = path.join(ROOT, 'assets', 'webm');
 const sizeOf = (dir, n) => {
   const f = path.join(dir, `${n}.webm`);

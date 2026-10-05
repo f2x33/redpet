@@ -1,5 +1,5 @@
 /**
- * dsh-redteam-pet desktop helper —— 「宿主没了就自己退」的纯判定（issue #56）。
+ * dsh-redpet desktop helper —— 「宿主没了就自己退」的纯判定（issue #56）。
  *
  * 背景：helper 的 stdout/stderr 是宿主给的管道（helper-process.ts: stdio ['pipe','pipe','pipe']）。
  * 宿主进程一退出，这两根管道的读端随之关闭，而 helper 下一次写（bridge 协议行 —— 渲染端每秒至少

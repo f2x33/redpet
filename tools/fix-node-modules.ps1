@@ -1,9 +1,9 @@
 <#
-  fix-node-modules.ps1 -- recreate the local dependency-resolution links for dsh-redteam-pet.
+  fix-node-modules.ps1 -- recreate the local dependency-resolution links for dsh-redpet.
 
   WHY THIS EXISTS
     The plugin package lives OUTSIDE the DSH profile directory (for example
-    D:\...\dsh-redteam-pet). Node resolves bare imports by walking up from the
+    D:\...\dsh-redpet). Node resolves bare imports by walking up from the
     importing file, so lib/index.js can never reach the profile's node_modules,
     and the plugin dies at import time with "failed to import".
 
@@ -40,7 +40,7 @@ $links = [ordered]@{
   '@electron-internal' = Join-Path $dshHome 'profiles\web\node_modules\@electron-internal'
 }
 
-Write-Host "== dsh-redteam-pet :: fix node_modules ==" -ForegroundColor Cyan
+Write-Host "== dsh-redpet :: fix node_modules ==" -ForegroundColor Cyan
 Write-Host "package : $Pkg"
 Write-Host "dsh home: $dshHome`n"
 

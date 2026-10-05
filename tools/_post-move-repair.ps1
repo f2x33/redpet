@@ -34,7 +34,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-Write-Host "== dsh-redteam-pet :: post-move repair ==" -ForegroundColor Cyan
+Write-Host "== dsh-redpet :: post-move repair ==" -ForegroundColor Cyan
 Write-Host "old: $Old"
 Write-Host "new: $New`n"
 

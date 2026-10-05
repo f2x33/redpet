@@ -1,7 +1,7 @@
 {
-  "name": "dsh-redteam-pet-electron-helper",
+  "name": "dsh-redpet-electron-helper",
   "version": "0.1.0",
   "private": true,
-  "description": "dsh-redteam-pet desktop helper — Electron transparent overlay window",
+  "description": "dsh-redpet desktop helper — Electron transparent overlay window",
   "main": "main.js"
 }

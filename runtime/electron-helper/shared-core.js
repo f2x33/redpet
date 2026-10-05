@@ -433,7 +433,7 @@ function whisperBubbleView(state) {
 		text: msg
 	}];
 }
-function memeImageUrl(name, base = "/dsh-redteam-pet-7340", assetRoot = "") {
+function memeImageUrl(name, base = "/dsh-redpet-7340", assetRoot = "") {
 	const root = String(assetRoot ?? "").trim();
 	const prefix = root ? "/pic/memes/" + encodeURIComponent(root) : "/pic/memes";
 	return base + prefix + "/" + encodeURIComponent(name) + ".png";
@@ -441,25 +441,25 @@ function memeImageUrl(name, base = "/dsh-redteam-pet-7340", assetRoot = "") {
 const MEME_IMG_CLASS = "pet-bub-img";
 const MEME_BUBBLE_CLASS = "has-img";
 const MEME_BUBBLE_CSS = [
-	".pet-bub-img{display:block;width:calc(var(--dsh-redteam-pet-size,var(--pet-size,462px))*0.34);height:auto;",
-	"border-radius:calc(var(--dsh-redteam-pet-size,var(--pet-size,462px))*0.026);",
-	"margin:0 auto calc(var(--dsh-redteam-pet-size,var(--pet-size,462px))*0.017);object-fit:cover;",
+	".pet-bub-img{display:block;width:calc(var(--dsh-redpet-size,var(--pet-size,462px))*0.34);height:auto;",
+	"border-radius:calc(var(--dsh-redpet-size,var(--pet-size,462px))*0.026);",
+	"margin:0 auto calc(var(--dsh-redpet-size,var(--pet-size,462px))*0.017);object-fit:cover;",
 	"pointer-events:none;user-select:none}",
-	".pet-bubble.has-img,.dsh-redteam-pet-bubble.has-img{min-width:0}"
+	".pet-bubble.has-img,.dsh-redpet-bubble.has-img{min-width:0}"
 ].join("");
 /** 只注入一次（两端共用；页面已有同一标记则跳过） */
 let memeCssInjected = false;
 function injectMemeBubbleCss() {
 	if (memeCssInjected || typeof document === "undefined") return;
 	memeCssInjected = true;
-	if (document.querySelector("style[data-plugin-css=\"dsh-redteam-pet/meme-bubble\"]") !== null) return;
+	if (document.querySelector("style[data-plugin-css=\"dsh-redpet/meme-bubble\"]") !== null) return;
 	const tag = document.createElement("style");
-	tag.dataset.plugin = "dsh-redteam-pet";
-	tag.dataset.pluginCss = "dsh-redteam-pet/meme-bubble";
+	tag.dataset.plugin = "dsh-redpet";
+	tag.dataset.pluginCss = "dsh-redpet/meme-bubble";
 	tag.textContent = MEME_BUBBLE_CSS;
 	document.head.appendChild(tag);
 }
-function createMemeImage(name, base = "/dsh-redteam-pet-7340", assetRoot = "") {
+function createMemeImage(name, base = "/dsh-redpet-7340", assetRoot = "") {
 	const key = String(name ?? "").trim();
 	if (!key) return null;
 	injectMemeBubbleCss();
@@ -615,25 +615,25 @@ function isNoMirrorAnimation(categories, anim) {
 	return (categories ?? []).some((c) => c.noMirror === true && c.actions.includes(anim));
 }
 const MENU_CSS = [
-	".dsh-redteam-pet-menu{position:fixed;left:0;top:0;z-index:2147483000;color:#2b2b2b;font-size:13px;line-height:1.5;",
+	".dsh-redpet-menu{position:fixed;left:0;top:0;z-index:2147483000;color:#2b2b2b;font-size:13px;line-height:1.5;",
 	"font-family:'Microsoft YaHei UI','Segoe UI','PingFang SC',sans-serif;user-select:none;pointer-events:auto}",
-	".dsh-redteam-pet-menu,.dsh-redteam-pet-menu *{box-sizing:border-box}",
-	".dsh-redteam-pet-menu-column{position:absolute;min-width:150px;max-width:240px;padding:4px;",
+	".dsh-redpet-menu,.dsh-redpet-menu *{box-sizing:border-box}",
+	".dsh-redpet-menu-column{position:absolute;min-width:150px;max-width:240px;padding:4px;",
 	"background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:8px;",
 	"box-shadow:0 8px 28px rgba(0,0,0,.2);max-height:min(62vh,460px);overflow-y:auto;",
 	"scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.22) transparent}",
-	".dsh-redteam-pet-menu-column::-webkit-scrollbar{width:8px;height:8px}",
-	".dsh-redteam-pet-menu-column::-webkit-scrollbar-track{background:transparent}",
-	".dsh-redteam-pet-menu-column::-webkit-scrollbar-thumb{background:rgba(0,0,0,.16);border-radius:4px;",
+	".dsh-redpet-menu-column::-webkit-scrollbar{width:8px;height:8px}",
+	".dsh-redpet-menu-column::-webkit-scrollbar-track{background:transparent}",
+	".dsh-redpet-menu-column::-webkit-scrollbar-thumb{background:rgba(0,0,0,.16);border-radius:4px;",
 	"border:2px solid transparent;background-clip:content-box}",
-	".dsh-redteam-pet-menu-column::-webkit-scrollbar-thumb:hover{background:rgba(43,99,255,.4);",
+	".dsh-redpet-menu-column::-webkit-scrollbar-thumb:hover{background:rgba(43,99,255,.4);",
 	"border:2px solid transparent;background-clip:content-box}",
-	".dsh-redteam-pet-menu-column::-webkit-scrollbar-corner{background:transparent}",
-	".dsh-redteam-pet-menu-item{position:relative;display:flex;align-items:center;justify-content:space-between;",
+	".dsh-redpet-menu-column::-webkit-scrollbar-corner{background:transparent}",
+	".dsh-redpet-menu-item{position:relative;display:flex;align-items:center;justify-content:space-between;",
 	"gap:14px;padding:5px 12px;border-radius:6px;white-space:nowrap;cursor:default}",
-	".dsh-redteam-pet-menu-item:hover{background:rgba(43,99,255,.14)}",
-	".dsh-redteam-pet-menu-item>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}",
-	".dsh-redteam-pet-menu-arrow{color:#9aa0a6;font-size:12px;flex:none}"
+	".dsh-redpet-menu-item:hover{background:rgba(43,99,255,.14)}",
+	".dsh-redpet-menu-item>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}",
+	".dsh-redpet-menu-arrow{color:#9aa0a6;font-size:12px;flex:none}"
 ].join("");
 function isBranchNode(n) {
 	return "children" in n && Array.isArray(n.children);
@@ -647,7 +647,7 @@ function mountContextMenu(opts) {
 		h: window.innerHeight
 	};
 	const root = document.createElement("div");
-	root.className = "dsh-redteam-pet-menu";
+	root.className = "dsh-redpet-menu";
 	root.style.left = "0px";
 	root.style.top = "0px";
 	root.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -683,19 +683,19 @@ function mountContextMenu(opts) {
 	*  面板自身先入 DOM、子面板随后入 → 层级越深绘制越靠上（子菜单盖在父菜单上层）。 */
 	const buildPanel = (nodes) => {
 		const panel = document.createElement("div");
-		panel.className = "dsh-redteam-pet-menu-column";
+		panel.className = "dsh-redpet-menu-column";
 		panel.style.display = "none";
 		if (clamp) panel.style.maxHeight = Math.min(460, Math.max(120, c.h - 16)) + "px";
 		root.appendChild(panel);
 		for (const node of nodes) {
 			const item = document.createElement("div");
-			item.className = "dsh-redteam-pet-menu-item";
+			item.className = "dsh-redpet-menu-item";
 			if (isBranchNode(node)) {
-				item.classList.add("dsh-redteam-pet-menu-branch");
+				item.classList.add("dsh-redpet-menu-branch");
 				const label = document.createElement("span");
 				label.textContent = node.label;
 				const arrow = document.createElement("span");
-				arrow.className = "dsh-redteam-pet-menu-arrow";
+				arrow.className = "dsh-redpet-menu-arrow";
 				arrow.textContent = "▸";
 				item.appendChild(label);
 				item.appendChild(arrow);
@@ -781,7 +781,7 @@ async function sendChat(baseUrl, text) {
 		signal: AbortSignal.timeout(SEND_TIMEOUT_MS)
 	});
 	const raw = await res.json().catch(() => null);
-	if (!raw || typeof raw !== "object") throw new Error("dsh-redteam-pet: 对话响应非法");
+	if (!raw || typeof raw !== "object") throw new Error("dsh-redpet: 对话响应非法");
 	const o = raw;
 	if (o.ok !== true) return {
 		ok: false,
@@ -791,18 +791,18 @@ async function sendChat(baseUrl, text) {
 	return { ok: true };
 }
 const CHAT_CSS = [
-	".dsh-redteam-pet-chat{position:fixed;z-index:2147483001;width:160px;max-width:80vw;",
+	".dsh-redpet-chat{position:fixed;z-index:2147483001;width:160px;max-width:80vw;",
 	"background:rgba(255,255,255,.98);border:1px solid rgba(0,0,0,.12);border-radius:10px;",
 	"box-shadow:0 10px 32px rgba(0,0,0,.22);color:#2b2b2b;font-size:14px;line-height:1.5;",
 	"font-family:'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif;",
 	"user-select:none}",
-	".dsh-redteam-pet-chat *{box-sizing:border-box}",
-	".dsh-redteam-pet-chat-input{display:block;width:100%;border:none;outline:none;background:transparent;",
+	".dsh-redpet-chat *{box-sizing:border-box}",
+	".dsh-redpet-chat-input{display:block;width:100%;border:none;outline:none;background:transparent;",
 	"padding:8px 11px 9px;font-size:14px;line-height:1.45;color:#2b2b2b;font-family:inherit;",
 	"resize:none;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere}",
-	".dsh-redteam-pet-chat-input::placeholder{color:rgba(43,43,43,.45)}",
-	".dsh-redteam-pet-chat-input:disabled{opacity:.55}",
-	".dsh-redteam-pet-chat-err{color:#d94f3d;font-size:12px;padding:0 12px 8px;white-space:pre-wrap;overflow-wrap:anywhere}"
+	".dsh-redpet-chat-input::placeholder{color:rgba(43,43,43,.45)}",
+	".dsh-redpet-chat-input:disabled{opacity:.55}",
+	".dsh-redpet-chat-err{color:#d94f3d;font-size:12px;padding:0 12px 8px;white-space:pre-wrap;overflow-wrap:anywhere}"
 ].join("");
 /** 输入框宽度自适应参数：初始小宽 → 随文本增宽 → 封顶后折行增高 */
 const CHAT_MIN_W = 160;
@@ -813,15 +813,15 @@ function injectChatCss() {
 	if (chatCssInjected || typeof document === "undefined") return;
 	chatCssInjected = true;
 	const tag = document.createElement("style");
-	tag.dataset.plugin = "dsh-redteam-pet";
-	tag.dataset.pluginCss = "dsh-redteam-pet/chat";
+	tag.dataset.plugin = "dsh-redpet";
+	tag.dataset.pluginCss = "dsh-redpet/chat";
 	tag.textContent = CHAT_CSS;
 	document.head.appendChild(tag);
 }
 function mountChatDialog(opts) {
 	injectChatCss();
 	const { petId, x, y, onSent, onClose, clamp } = opts;
-	const baseUrl = opts.baseUrl ?? "/dsh-redteam-pet-7340/chat";
+	const baseUrl = opts.baseUrl ?? "/dsh-redpet-7340/chat";
 	const withPet = baseUrl + "?pet=" + encodeURIComponent(petId);
 	const c = clamp && Number.isFinite(clamp.x + clamp.y + clamp.w + clamp.h) ? clamp : {
 		x: 0,
@@ -830,9 +830,9 @@ function mountChatDialog(opts) {
 		h: window.innerHeight
 	};
 	const root = document.createElement("div");
-	root.className = "dsh-redteam-pet-chat";
+	root.className = "dsh-redpet-chat";
 	const input = document.createElement("textarea");
-	input.className = "dsh-redteam-pet-chat-input";
+	input.className = "dsh-redpet-chat-input";
 	input.placeholder = "说点什么…";
 	input.maxLength = 2e3;
 	input.rows = 1;
@@ -852,7 +852,7 @@ function mountChatDialog(opts) {
 	input.addEventListener("input", resizeInput);
 	resizeInput();
 	const err = document.createElement("div");
-	err.className = "dsh-redteam-pet-chat-err";
+	err.className = "dsh-redpet-chat-err";
 	err.style.display = "none";
 	root.appendChild(input);
 	root.appendChild(err);
@@ -1221,15 +1221,15 @@ const clickScore = (speed, size) => {
 //#region src/shared/score-popup.ts
 const SCORE_POPUP_DURATION_MS = 2200;
 const SCORE_POPUP_CSS = [
-	".dsh-redteam-pet-score{position:fixed;z-index:2147483002;min-width:120px;text-align:center;",
+	".dsh-redpet-score{position:fixed;z-index:2147483002;min-width:120px;text-align:center;",
 	"background:rgba(255,255,255,.97);border:1px solid rgba(255,179,0,.35);border-radius:12px;",
 	"box-shadow:0 10px 32px rgba(0,0,0,.22);padding:8px 16px 9px;user-select:none;pointer-events:auto;",
 	"font-family:'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif;}",
-	".dsh-redteam-pet-score.is-in{animation:dshPetScorePop .28s ease}",
-	".dsh-redteam-pet-score-val{font-size:22px;line-height:1.25;font-weight:700;color:#ff8f00;font-variant-numeric:tabular-nums}",
-	".dsh-redteam-pet-score-sub{font-size:11px;line-height:1.4;color:rgba(43,43,43,.6);margin-top:2px;white-space:nowrap}",
-	".dsh-redteam-pet-score-burst{position:fixed;inset:0;pointer-events:none;z-index:2147483002}",
-	".dsh-redteam-pet-score-particle{position:absolute;border-radius:50%;pointer-events:none}",
+	".dsh-redpet-score.is-in{animation:dshPetScorePop .28s ease}",
+	".dsh-redpet-score-val{font-size:22px;line-height:1.25;font-weight:700;color:#ff8f00;font-variant-numeric:tabular-nums}",
+	".dsh-redpet-score-sub{font-size:11px;line-height:1.4;color:rgba(43,43,43,.6);margin-top:2px;white-space:nowrap}",
+	".dsh-redpet-score-burst{position:fixed;inset:0;pointer-events:none;z-index:2147483002}",
+	".dsh-redpet-score-particle{position:absolute;border-radius:50%;pointer-events:none}",
 	"@keyframes dshPetScorePop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}"
 ].join("");
 /** 粒子只注入一次（同 CHAT_CSS 的 injectChatCss 模式） */
@@ -1238,8 +1238,8 @@ function injectScoreCss() {
 	if (scoreCssInjected || typeof document === "undefined") return;
 	scoreCssInjected = true;
 	const tag = document.createElement("style");
-	tag.dataset.plugin = "dsh-redteam-pet";
-	tag.dataset.pluginCss = "dsh-redteam-pet/score";
+	tag.dataset.plugin = "dsh-redpet";
+	tag.dataset.pluginCss = "dsh-redpet/score";
 	tag.textContent = SCORE_POPUP_CSS;
 	document.head.appendChild(tag);
 }
@@ -1270,7 +1270,7 @@ function spawnScoreBurst(x, y) {
 	if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 	injectScoreCss();
 	const root = document.createElement("div");
-	root.className = "dsh-redteam-pet-score-burst";
+	root.className = "dsh-redpet-score-burst";
 	document.body.appendChild(root);
 	const parts = [];
 	for (let i = 0; i < BURST_COUNT; i++) {
@@ -1278,7 +1278,7 @@ function spawnScoreBurst(x, y) {
 		const speed = BURST_SPEED_MIN + Math.random() * (BURST_SPEED_MAX - BURST_SPEED_MIN);
 		const r = BURST_RADIUS_MIN + Math.random() * (BURST_RADIUS_MAX - BURST_RADIUS_MIN);
 		const el = document.createElement("div");
-		el.className = "dsh-redteam-pet-score-particle";
+		el.className = "dsh-redpet-score-particle";
 		el.style.left = x + "px";
 		el.style.top = y + "px";
 		el.style.width = r * 2 + "px";
@@ -1314,12 +1314,12 @@ function mountScorePopup(opts) {
 	const x = opts.x;
 	const y = opts.y;
 	const root = document.createElement("div");
-	root.className = "dsh-redteam-pet-score";
+	root.className = "dsh-redpet-score";
 	const val = document.createElement("div");
-	val.className = "dsh-redteam-pet-score-val";
+	val.className = "dsh-redpet-score-val";
 	val.textContent = "+" + opts.score;
 	const sub = document.createElement("div");
-	sub.className = "dsh-redteam-pet-score-sub";
+	sub.className = "dsh-redpet-score-sub";
 	sub.textContent = "速度 " + Math.round(opts.speed) + " · 大小 " + Math.round(opts.size);
 	root.appendChild(val);
 	root.appendChild(sub);
@@ -1405,7 +1405,7 @@ function normLeaf(value) {
 		data: leaf$1.data ?? null
 	};
 }
-async function fetchState(baseUrl = "/dsh-redteam-pet-7340/state") {
+async function fetchState(baseUrl = "/dsh-redpet-7340/state") {
 	try {
 		const res = await fetch(baseUrl, { cache: "no-store" });
 		if (!res.ok) return null;

@@ -1,5 +1,5 @@
 /**
- * dsh-redteam-pet desktop helper renderer —— 启动入口。
+ * dsh-redpet desktop helper renderer —— 启动入口。
  *
  * 依赖链（index.html 顺序加载）：shared-core.js → constants.js → sprite.js →
  * events.js → renderer.js（本文件）。本文件只做：配置加载 / 错误处理 / 启动装配 / 素材注入。
@@ -7,10 +7,10 @@
  * 与浏览器 overlay 严格对齐（宠物行为/文案完全一致）：
  *   - 纯逻辑（常量/选择器/移动几何/余额折算/拍平）来自 shared-core.js
  *     （= src/shared 的构建产物，window.PetShared）——与浏览器 bundle 共用同一份源码；
- *   - 配置唯一来源 = 宿主 /dsh-redteam-pet-7340/config 的**成品聚合**（host readAllConfig 合并，
+ *   - 配置唯一来源 = 宿主 /dsh-redpet-7340/config 的**成品聚合**（host readAllConfig 合并，
  *     绝对正确、字段填满）：一步 fetch → S.flattenConfigPets 拍平，加载失败**大声报错**
  *     并显示红色错误条（每 5s 自动重试），绝无静默兜底池；
- *   - 动画素材经宿主 /dsh-redteam-pet-7340/thumb/<素材根>/<name>.<webm|mov>（素材根 = 条目 key；扩展名由共享常量 ANIMATION_EXT 决定）；
+ *   - 动画素材经宿主 /dsh-redpet-7340/thumb/<素材根>/<name>.<webm|mov>（素材根 = 条目 key；扩展名由共享常量 ANIMATION_EXT 决定）；
  *   - 几何模型：窗口 = 宠物包围盒 + 四周外扩余量（WINDOW_MARGIN_RATIO，为气泡/弹窗预留空间）。
  *     sprite 固定在窗口内 (margin.l, margin.t) 处，宠物的"移动"由本页把目标屏幕位置
  *     逐帧上报（petBridge.setBounds）→ 主进程按 sprite 位置 + 外扩余量移动窗口；
@@ -26,9 +26,9 @@
 
 // ---------- 配置（大声报错；失败 5s 重试） ----------
 function showError(message) {
-  console.error('[dsh-redteam-pet] ' + message);
+  console.error('[dsh-redpet] ' + message);
   window.__dshPetDebug.configOk = false;
-  errorEl.textContent = 'dsh-redteam-pet 配置错误：' + message;
+  errorEl.textContent = 'dsh-redpet 配置错误：' + message;
   errorEl.classList.add('visible');
 }
 function hideError() {
@@ -89,7 +89,7 @@ async function boot() {
   }
 }
 
-// 注入打字资源：气泡字体 + 点击/拖拽光标图标（与浏览器 overlay 同一套素材，host 经 /dsh-redteam-pet-7340/ 提供）
+// 注入打字资源：气泡字体 + 点击/拖拽光标图标（与浏览器 overlay 同一套素材，host 经 /dsh-redpet-7340/ 提供）
 function injectAssets() {
   const style = document.createElement('style');
   style.textContent =
