@@ -99,6 +99,34 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 
 // ============================================================================
+// 【自测用假 fetch】GENAPI_STUB_FETCH=1 时把 fetch 换成假的：**零网络、零花费**
+// ----------------------------------------------------------------------------
+// 为什么必须有它：2026-10-05 我用**带 --go 的真实命令**去验证"预算闸门"，
+// 结果真的调了 API、花掉 ¥4.66。教训：**花钱闸门的测试绝不能碰真网络。**
+// `--self-test` 会给每个用例设 GENAPI_STUB_FETCH=1 + GENAPI_STUB_LOG=<文件>，
+// 之后只检查「退出码」与「假 fetch 记下的调用日志」，一个真实请求都不会发。
+// ============================================================================
+if (process.env.GENAPI_STUB_FETCH === '1') {
+  const stubLog = process.env.GENAPI_STUB_LOG || path.join(ROOT, 'out', '_selftest', `stub-${process.pid}.log`);
+  fs.mkdirSync(path.dirname(stubLog), { recursive: true });
+  fs.writeFileSync(stubLog, '');
+  // 1×1 透明 PNG；够 genImage 走完 sniffImage + 落盘即可
+  const TINY_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    const method = String(init.method ?? 'GET').toUpperCase();
+    fs.appendFileSync(stubLog, `${method} ${u}\nBODY:${init.body === undefined ? '' : String(init.body)}\n---\n`);
+    const json = (obj) => new Response(JSON.stringify(obj), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.includes('/images/generations')) return json({ model: 'stub', data: [{ b64_json: TINY_PNG, output_format: 'png' }] });
+    if (u.includes('/contents/generations/tasks') && method === 'POST') return json({ id: 'stub-task-1' });
+    if (u.includes('/contents/generations/tasks/')) {
+      return json({ id: 'stub-task-1', status: 'succeeded', content: { video_url: 'https://stub.invalid/v.mp4' }, usage: { total_tokens: 48437 } });
+    }
+    return new Response(Buffer.alloc(1024), { status: 200, headers: { 'content-type': 'video/mp4' } }); // 视频下载
+  };
+}
+
+// ============================================================================
 // 【单价】—— 2026-10-05 改用**真实账单口径**重写（不再是我拍脑袋的占位价）
 // ----------------------------------------------------------------------------
 // 视频按 **token** 计费，token 量几乎正好是 (宽 × 高 × 帧率 × 时长) ÷ 1024：
@@ -222,6 +250,8 @@ const HELP = `gen-api.mjs —— 用火山方舟(Ark) API 把 docs/02 的 10 段
 选项：
   --go                 真正开始发请求（不加永远不发）
   --yes                预算闸门放行：预估超过 ¥50（可用 $env:BUDGET_GUARD_YUAN 改）时必须再加它
+  --self-test          用假 fetch 把花钱闸门与接口参数约束全测一遍（**零网络零花费**）。
+                       改过闸门/参数后先跑这个，**绝不要用带 --go 的真命令去测**。
   --probe              只验通路：模型 ID / 两种 schema / base64 首帧，结论写 out/_probe/
   --limit N            只做前 N 段（必须是正整数；N 等于全部段数时等价于 --all，会有提醒）
   --only a,b           只做这几段（名字必须与 assets/config.jsonc 逐字一致）
@@ -1178,13 +1208,104 @@ async function main() {
   }
 }
 
+// ============================================================================
+// --self-test：用假 fetch 把「花钱闸门」全测一遍（零网络、零花费）
+// ============================================================================
+// 每个用例都是**另起一个子进程**跑本脚本，并强制 GENAPI_STUB_FETCH=1 ——
+// 子进程里的 fetch 是假的，所以哪怕用例带 --go 也一个真实请求都发不出去。
+// 断言两件事：① 该拒绝的必须拒绝且 **0 次网络调用**；② 真跑路径发出的请求体
+// 必须符合实测出来的接口约束（这正是 camera_fixed / ratio 那两个 bug 的回归测试）。
+async function runSelfTest() {
+  const { spawnSync } = await import('node:child_process');
+  const self = fileURLToPath(import.meta.url);
+  const tmp = path.join(ROOT, 'out', '_selftest');
+  fs.mkdirSync(tmp, { recursive: true });
+
+  let failed = 0;
+  const pass = (m) => console.log(`  \u2713 ${m}`);
+  const fail = (m) => { failed++; console.log(`  \u2717 ${m}`); };
+
+  const cases = [
+    {
+      name: '不给 --go：只空跑，0 次网络调用',
+      args: ['--limit', '1', '--resolution', '480p', '--duration', '5'],
+      expectExit: 0, expectCalls: 0,
+    },
+    {
+      name: '给了 --go 但没给 --all/--limit/--only：必须拒绝，0 次网络调用',
+      args: ['--go'],
+      expectExit: 1, expectCalls: 0,
+    },
+    {
+      name: '超预算闸门（默认 720p/10 秒全量）：必须拒绝 + 0 次网络调用',
+      args: ['--all', '--go'],
+      expectExit: 1, expectCalls: 0,
+    },
+    {
+      name: '真跑路径（假 fetch）：出图 → 建任务 → 轮询 → 下载，且请求体符合接口约束',
+      args: ['--only', '写代码', '--force',
+        '--out-raw', path.join(tmp, 'raw'), '--stills', path.join(tmp, 'stills'),
+        '--resolution', '480p', '--duration', '5', '--go'],
+      expectExit: 0, minCalls: 4,
+      check: (log) => {
+        const problems = [];
+        if (!/POST .*\/images\/generations/.test(log)) problems.push('没有发图生图请求');
+        if (!/POST .*\/contents\/generations\/tasks/.test(log)) problems.push('没有建视频任务');
+        if (!/GET .*\/contents\/generations\/tasks\/stub-task-1/.test(log)) problems.push('没有轮询任务');
+        const post = log.split('---').find((b) => b.includes('POST') && b.includes('/contents/generations/tasks'));
+        if (post) {
+          // —— 接口约束的回归测试（这三条都是实测踩出来的）——
+          if (post.includes('camera_fixed')) problems.push('建任务请求里出现了 camera_fixed（seedance-2-5 的 i2v 会 400）');
+          if (/"ratio"/.test(post)) problems.push('带首帧时不该传 ratio（会 400 TaskTypeConstraint）');
+          if (!post.includes('"generate_audio":false')) problems.push('没有显式 generate_audio:false（不传时模型默认合成音频，白花钱）');
+        }
+        return problems;
+      },
+    },
+  ];
+
+  console.log('\n=== gen-api 自测（全部走假 fetch，零网络零花费）===');
+  for (const c of cases) {
+    const logFile = path.join(tmp, `stub-${Math.random().toString(36).slice(2, 8)}.log`);
+    const env = { ...process.env, GENAPI_STUB_FETCH: '1', GENAPI_STUB_LOG: logFile, ARK_API_KEY: 'stub-not-a-real-key' };
+    delete env.BUDGET_GUARD_YUAN; // 用脚本内的默认闸门值
+    const r = spawnSync(process.execPath, [self, ...c.args], { cwd: ROOT, env, stdio: 'ignore' });
+    const log = fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8') : '';
+    const calls = (log.match(/^(GET|POST) /gm) ?? []).length;
+    const problems = [];
+    if (r.status !== c.expectExit) problems.push(`退出码 ${r.status}，期望 ${c.expectExit}`);
+    if (c.expectCalls !== undefined && calls !== c.expectCalls) problems.push(`网络调用 ${calls} 次，期望 ${c.expectCalls} 次`);
+    if (c.minCalls !== undefined && calls < c.minCalls) problems.push(`网络调用只有 ${calls} 次，至少应有 ${c.minCalls} 次`);
+    if (c.check) problems.push(...c.check(log));
+    if (problems.length === 0) pass(c.name);
+    else fail(`${c.name} → ${problems.join('；')}`);
+    fs.rmSync(logFile, { force: true });
+  }
+
+  console.log('');
+  if (failed === 0) {
+    console.log('结论：花钱闸门与接口参数约束全部符合预期。\n');
+    process.exit(0);
+  } else {
+    console.log(`结论：${failed} 个用例不符合预期。\n`);
+    process.exit(1);
+  }
+}
+
 const isMain =
   !!process.argv[1] &&
   import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
 if (isMain) {
-  main().catch((e) => {
-    console.error(`\n✗ ${e.message}`);
-    if (e.raw) console.error(`原始响应：${e.raw}`);
-    process.exitCode = 1;
-  });
+  if (process.argv.includes('--self-test')) {
+    runSelfTest().catch((e) => {
+      console.error(`\n✗ 自测本身崩了：${e.message}`);
+      process.exitCode = 1;
+    });
+  } else {
+    main().catch((e) => {
+      console.error(`\n✗ ${e.message}`);
+      if (e.raw) console.error(`原始响应：${e.raw}`);
+      process.exitCode = 1;
+    });
+  }
 }
