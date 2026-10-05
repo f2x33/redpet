@@ -135,6 +135,39 @@ $DSH_HOME/dsh-redteam-pet/main-animation/webm/*.webm
 > 2. **动作名必须逐字一致**（含中文、连字符）。差一个字：右键菜单有名字，点了 404。
 > 3. **背景必须纯绿 `#00FF00`**；生成时关掉水印/字幕/logo。
 
+### 3.1 模型 ID 与「开通」—— 最容易卡住的一步（2026-10-05 真实实测）
+
+脚本里的默认模型 ID 是**占位值、会过期**。真实调用时三种报错的含义完全不同，别搞混：
+
+| 报错 | 到底什么意思 | 怎么办 | 花钱吗 |
+|---|---|---|---|
+| `404 InvalidEndpointOrModel.NotFound` | 模型 ID 不存在 / 已下线 | 换个 ID | **不花**（生成前就被拒） |
+| `404 ModelNotOpen` | **ID 是对的，但你的账号没开通这个模型** | 去方舟控制台「**开通管理**」点开通（开通免费，按量计费） | **不花** |
+| `400 InvalidParameter` | 请求参数不全 | 看提示补参数 | **不花** |
+
+> ⚠ **`400` 不能用来判断模型是否存在** —— 参数校验跑在模型校验**之前**，一个完全不存在的假模型名也返回 `400 InvalidParameter`。我们做过对照实验才确认这一点，别看 400 就以为模型是好的。
+
+**零成本列出当前可用的模型 ID**（Ark 是 OpenAI 兼容端点）：
+
+```powershell
+$env:ARK_API_KEY = "你的key"
+curl.exe -s -H "Authorization: Bearer $env:ARK_API_KEY" `
+  "https://ark.cn-beijing.volces.com/api/v3/models"
+```
+
+**挑选规则（实测）**：条目里带 **`status: "Shutdown"` 或 `"Retiring"`** 的是已下线/正在下线，调用**必然 404**；**不带 `status` 字段**的才是当前可用。
+
+把选定的 ID 写进 `out\_probe\models.json`（优先级：环境变量 > 这个文件 > 脚本内占位默认）：
+
+```json
+{ "image": "doubao-seedream-5-0-pro-260628", "video": "doubao-seedance-2-5-260628" }
+```
+
+**验证是否真的能用**：`node tools\gen-api.mjs --probe --go`。ID 不对 → 404，**不产生费用**；正确 → 生成 1 张图 + 1 段 5 秒视频（约 ¥1.7，按你账号实际单价）。
+
+**省钱建议**：验收阶段用 `--limit 2 --duration 5`（2 段 × 5 秒）而不是直接 `--all`；
+视频真实计费常按 token 折算，脚本顶部的 `PRICE_*` 常量只是占位估算，**以方舟控制台账单为准**。
+
 ---
 
 ## 四、配置
