@@ -300,7 +300,7 @@ dsh-redteam-pet\
 | **两只宠物** | 包 patch 和用户层**都**插了插件行 → 把 `cordis.patch.yml` 改回 `[]` |
 | 右键菜单有名字，点了没反应（404） | 素材文件名与配置里的动作名不一致（差空格/连字符/简体繁体）→ `node tools\selftest.mjs` 会列出名字 |
 | 素材是透明背景但播放黑底 | VP9 alpha 只有 Chromium 内核认（Chrome/Edge/Electron）；普通播放器显示黑底是正常的 |
-| **换了素材，页面上还是旧的那段** | **最容易踩的坑。** 用户目录里的同名素材会覆盖包内素材，但**文件名没变**，而素材路由的响应头是 `cache-control: public, max-age=3600` —— 浏览器最多缓存 **1 小时**，分不出新旧。解决：**`Ctrl+Shift+R` 强制刷新**（普通 F5 不够），或 F12 → Network 勾 Disable cache，或关掉标签页重开。想确认服务器到底在传哪一份：直接把 `http://127.0.0.1:3080/dsh-redteam-pet-7340/thumb/main/<动作名>.webm` 贴进地址栏看，或跑 `node tools\verify-live.mjs`（它会按返回字节数与两个目录比对，告诉你每段用的是红队素材还是包内占位） |
+| **换了素材，页面上还是旧的那段** | **最容易踩的坑。** 用户目录里的同名素材会覆盖包内素材，但**文件名没变**，而素材路由的响应头是 `cache-control: public, max-age=3600` —— 浏览器最多缓存 **1 小时**，分不出新旧。实测踩到：换成红队素材后，页面上**和直接打开素材 URL** 都还是 dsh-pet 的女仆；同一个 URL 加个 `?v=2` 立刻正常。**已修**：客户端给素材 URL 加了随每次页面加载变化的 `?v=<时间戳>`，**刷新一次即生效**。想确认服务器在传哪一份：跑 `node tools\verify-live.mjs`（按返回字节数与两个目录比对，告诉你每段用的是红队素材还是包内占位） |
 | 设置页提示「宿主半侧还没更新」 | 改了 `lib/index.js` 需要**重启 DSH**；只改 `lib/client.js` 刷新页面即可 |
 | 插件在，但页面上**看不见宠物** | 先跑 `node tools\verify-live.mjs`。⚠ **`/plugins/dsh-redteam-pet/client.js` 返回 404 不代表有问题** —— 这条路由对命令行不可达（连官方插件、甚至首页 `/` 都是 404/401），脚本会拿官方插件当对照来判断。命令行想确认：查 client 平台的 Slots 占用者，`shell.overlay` 里应有一条 `registrant=pet` 且 `active=true`。浏览器半侧只在 **DSH 启动时**扫描登记，所以首次挂载/改名后要重启 DSH |
 | 插件莫名其妙被关掉 | `dshmarket` 会把它的开关状态同步成用户层里一行裸的 `- id: dsh-redteam-pet / disabled: true`。查 `$DSH_HOME\profiles\web\.dsh-market\state.json` 的 `disabled` 列表，并删掉那一行 |
