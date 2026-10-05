@@ -31,6 +31,7 @@ const ROUTE = '/dsh-redteam-pet-7340';
 const HEADERS = { Origin: ORIGIN };
 
 let hardFailures = 0;
+let clientInconclusive = false; // 「浏览器半侧」这一项命令行测不出结果时置位
 const ok = (m) => console.log(`  \u2713 ${m}`);
 const bad = (m) => { hardFailures++; console.log(`  \u2717 ${m}`); };
 const warn = (m) => console.log(`  ! ${m}`);
@@ -69,13 +70,26 @@ for (const p of ['/state', '/config/meta']) {
 }
 
 // ---- ② 浏览器半侧（需要重启过）--------------------------------------------
+// ⚠ 关键教训：`/plugins/<id>/client.js` **对命令行不可达** —— 它有浏览器信任检查，
+//   连官方客户端插件（甚至 DSH 首页 `/`）都返回 404/401。所以**绝不能把这条 404 当失败**：
+//   早先版本这么做，害得我在插件其实正常时就断言"浏览器半侧没登记、必须重启"。
+//   正确做法：先拿一个已知的官方客户端插件当**对照组** ——
+//     对照也是 404 → 这条路由命令行不可达 → 本项【无法判定】，交给浏览器里的肉眼验收
+//     对照 200 而我们 404 → 那才是真的没登记
 console.log('\n[2/3] 浏览器半侧登记');
+const CONTROL_URL = '/plugins/dshmarket/client.js'; // 已知客户端插件，用作可达性对照
 const cli = await probe('/plugins/dsh-redteam-pet/client.js');
+const ctrl = await probe(CONTROL_URL);
 if (cli.status === 200) {
   ok(`/plugins/dsh-redteam-pet/client.js  200（${cli.len} bytes）—— 页面上应该能看到宠物了`);
+} else if (cli.status === 404 && ctrl.status === 404) {
+  clientInconclusive = true;
+  warn(`client.js 404 —— 但对照组 ${CONTROL_URL} 也是 404，说明这条路由**命令行不可达**，本项无法判定`);
+  console.log('      → 请在浏览器里刷新页面（Ctrl+F5）看宠物有没有出现');
+  console.log('        命令行想确认也行：查 client 平台的 Slots 占用者，shell.overlay 里应有一条 registrant=pet 且 active=true');
 } else if (cli.status === 404) {
-  bad('client.js 404 —— 客户端模块表里没有它。这一项**只在 DSH 启动时**扫描登记，没有重扫入口');
-  console.log('      → 重启 DSH（关掉 dsh web 再起），然后 Ctrl+F5');
+  bad(`client.js 404（而对照组 ${CONTROL_URL} 是 ${ctrl.status}）—— 客户端模块表里确实没有它`);
+  console.log('      → 这一项只在 DSH 启动时扫描登记，没有重扫入口：重启 DSH 后再试');
 } else {
   bad(`client.js ${cli.status} ${cli.error ?? ''}`);
 }
@@ -130,11 +144,17 @@ if (reachable === 0) {
 
 // ---- 汇总 ------------------------------------------------------------------
 console.log('\n=== 汇总 ===');
-console.log(`硬伤 ${hardFailures} 个`);
+console.log(`硬伤 ${hardFailures} 个` + (clientInconclusive ? '（其中「浏览器半侧」一项命令行无法判定）' : ''));
 if (hardFailures === 0) {
-  console.log('结论：插件在线、浏览器半侧已登记、素材可播 —— 刷新页面（Ctrl+F5）就能看到红队小队员。\n');
+  console.log('结论：宿主半侧在线、素材可播。');
+  if (clientInconclusive) {
+    console.log('      「浏览器半侧」这条命令行测不出来（路由对命令行不可达）——');
+    console.log('      请在浏览器里刷新页面（Ctrl+F5）看宠物是否出现。\n');
+  } else {
+    console.log('      刷新页面（Ctrl+F5）就能看到红队小队员。\n');
+  }
   process.exit(0);
 } else {
-  console.log('结论：见上面的 ✗。最常见的就是「没重启 DSH」，重启后重跑本脚本即可。\n');
+  console.log('结论：见上面的 ✗。\n');
   process.exit(1);
 }

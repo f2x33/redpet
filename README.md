@@ -301,7 +301,7 @@ dsh-redteam-pet\
 | 右键菜单有名字，点了没反应（404） | 素材文件名与配置里的动作名不一致（差空格/连字符/简体繁体）→ `node tools\selftest.mjs` 会列出名字 |
 | 素材是透明背景但播放黑底 | VP9 alpha 只有 Chromium 内核认（Chrome/Edge/Electron）；普通播放器显示黑底是正常的 |
 | 设置页提示「宿主半侧还没更新」 | 改了 `lib/index.js` 需要**重启 DSH**；只改 `lib/client.js` 刷新页面即可 |
-| 插件在，但页面上**看不见宠物** | 浏览器半侧没登记 → 跑 `node tools\verify-live.mjs` 看 `/plugins/dsh-redteam-pet/client.js` 是不是 404。是 → **重启 DSH**（这一项只在启动时扫描） |
+| 插件在，但页面上**看不见宠物** | 先跑 `node tools\verify-live.mjs`。⚠ **`/plugins/dsh-redteam-pet/client.js` 返回 404 不代表有问题** —— 这条路由对命令行不可达（连官方插件、甚至首页 `/` 都是 404/401），脚本会拿官方插件当对照来判断。命令行想确认：查 client 平台的 Slots 占用者，`shell.overlay` 里应有一条 `registrant=pet` 且 `active=true`。浏览器半侧只在 **DSH 启动时**扫描登记，所以首次挂载/改名后要重启 DSH |
 | 插件莫名其妙被关掉 | `dshmarket` 会把它的开关状态同步成用户层里一行裸的 `- id: dsh-redteam-pet / disabled: true`。查 `$DSH_HOME\profiles\web\.dsh-market\state.json` 的 `disabled` 列表，并删掉那一行 |
 | 启动时插件被 `dsh-safe` 隔离 | 那是"启动保险丝"：插件启动失败时它会把该行置为 disabled（记在 `$DSH_HOME\dsh-safe\quarantine.json`）。修好插件后：`dsh-safe restore --profile web --id dsh-redteam-pet` |
 | 跑 `pipeline`/`keyscreen` 时看到 `⚠ 首选 ffmpeg 不能做 VP9-alpha` | **正常现象**：本机 PATH 上那个 ffmpeg（剪映/IDE 自带的）没有 `libvpx-vp9` 编码器，脚本自动换用兜底候选。脚本退出码仍是 **0**；想固定用哪个就设 `$env:FFMPEG` |
