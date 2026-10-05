@@ -26,10 +26,10 @@ assets/memes/*.png
 # 插件 logo：还是 dsh-pet 那条蓝鲸。本包没在 package.json 里声明 icon 字段，
 #   所以它现在根本没被用到；等画好红队自己的 logo 再打开例外。
 assets/logo.png
-# 系统通知用的插画（notify-*.png）画的也是 dsh-pet 的角色，一并不入库。
-#   代价：窗口失焦时弹出的系统通知不带图，其余不受影响。
-#   assets/pic 下另外两张 cursor-*.png 是通用光标小图标（303 / 276 字节），保留入库。
-assets/pic/notify-*.png
+# 系统通知插画（notify-*.png）—— **已换成红队自己的**（2026-10-05）：
+#   从我们生成的透明动画里裁头肩特写（192×192，保留 alpha），属于本项目原创，**入库**。
+#   原来那 6 张 dsh-pet 的女仆插画已备份到 out/_backup-notify/（不入库）。
+#   assets/pic 下两张 cursor-*.png 是通用光标小图标（303 / 276 字节）。
 # 字体「上首软糖体」：气泡/菜单用的中文字体，同样来自 dsh-pet。
 #   不入库的代价很小 —— 浏览器 @font-face 取不到会回落到系统字体，布局不变。
 assets/fonts/*.ttf
