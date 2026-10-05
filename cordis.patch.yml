@@ -1,36 +1,31 @@
 # ============================================================================
-# dsh-redteam-pet 的 bundle patch —— 故意是空数组（重要，别改回 insert）
+# dsh-redteam-pet 的 bundle patch —— 声明本插件在配置树里的插件行
 # ============================================================================
 #
-# 【为什么这里不 insert 插件行】
-#   DSH 启动时：配置树 = 各 bundle 的 patch 层 + profile 用户层（+ home 层 + overlay）。
-#   而「实时补丁重载」（patchReload: live）重组的补丁栈是：
-#        启动时抓到的 bundlePatches + 重新读的用户层 + home 层 + overlay
-#   —— 也就是说 **bundle 层是启动那一刻快照的**：往 dsh.profile.bundles 里加包
-#   必须重启 DSH 才生效；用户层才是存盘即生效的那一层。
+# 【为什么是 bundle 自持，而不是写在 profile 用户层】
+#   2026-10-05 踩了一个大坑：原先这里故意留空数组 []，插件行改由 profile 用户层
+#   （$DSH_HOME/profiles/web/cordis.patch.yml）手写 insert。当时的理由是"bundle 层是
+#   启动快照、用户层才能存盘即生效"。
 #
-#   插件行如果这里插一次、profile 用户层再插一次，重启后就会出现**两只宠物**
-#   （insert 是追加，不按 id 去重）。所以本包的选择是：
-#       · 插件行只由 profile 用户层 insert（$DSH_HOME/profiles/web/cordis.patch.yml）
-#         → 存盘即挂载、不用重启 DSH
-#       · 本文件保持空数组，让 bundle 层不再插一行
+#   但那个方案有个致命问题：**dshmarket 会重写 profile 用户层**，把不是它自己写的
+#   条目（手写 insert、手写 disabled 行）整段抹掉。结果是：
+#     · 插件突然不挂载（insert 被抹）
+#     · 我补的 `- id: dsh-pet / disabled: true` 被抹，dsh-pet 又活了、来抢命令名
+#   一晚上反复打地鼠。**手写用户层 = 跟 dshmarket 抢同一个文件 = 输。**
 #
-# 【实测记录（2026-10-05）】
-#   只走 install_bundle 把它加进 dsh.profile.bundles 时：
-#     /dsh-redteam-pet-7340/config → HTTP 404（bundle 层没进快照）
-#   改成用户层 insert 后：
-#     /dsh-redteam-pet-7340/config → HTTP 200
+#   所以改成和 dsh-pet 一模一样的正规做法：
+#     · 包自己的 patch（本文件）insert 自己的插件行
+#     · 包名进 dsh.profile.bundles
+#   这样它就在商场的管理体系内，开关、安装、卸载都由商场正常处理，不会再被抹。
 #
-# 【会不会影响 dshmarket 的开关？不会】
-#   dshmarket 的 rowIdsForPackage() 有三个来源：包的 bundle patch、包根目录的
-#   cordis.patch.yml、以及**当前 loader 里 name 等于包名的活动行**。
-#   第三条能拿到 `dsh-redteam-pet`（用户层插进去那行的 id），所以市场里的开关照常能
-#   关掉/打开这只宠物（市场是往用户层追加 `- id: dsh-redteam-pet` + `disabled: true`）。
+# 【重要：不要再往 profile 用户层手写插件行】
+#   两边都 insert 会追加出**两只宠物**（insert 不按 id 去重）。
+#   本文件是唯一的插件行来源。
 #
-# 【要改成 bundle 自持插件行】
-#   1) 把下面改成 - insert: [{ id: dsh-redteam-pet, name: 'dsh-redteam-pet' }]
-#   2) 同时删掉 profile 用户层里那段 insert（二选一，别都留）
-#   3) 重启 DSH
+# 【改完要重启 DSH】
+#   bundle 层是启动那一刻的快照，改了必须重启才生效（用户层才是热重载的）。
 # ============================================================================
 
-[]
+- insert:
+    - id: dsh-redteam-pet
+      name: 'dsh-redteam-pet'
