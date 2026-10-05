@@ -95,8 +95,24 @@ profile 用户层插入（`$DSH_HOME\profiles\web\cordis.patch.yml`）：
 
 ### 4. 验证
 
+**一条命令全验收**（只读、不花钱；插件挂载 / 浏览器半侧登记 / 10 段素材来源一目了然）：
+
 ```powershell
-# 路由活着 = 宿主半侧挂上了（必须带 Origin，否则被 DSH 的浏览器信任检查挡成 401）
+node tools\verify-live.mjs
+```
+
+它检查三件事，并对失败给出具体原因：
+
+| 检查 | 说明 |
+|---|---|
+| `/config`、`/state` 200 | 宿主半侧挂上了 |
+| `/plugins/dsh-redteam-pet/client.js` 200 | **浏览器半侧登记了** —— 这一项**只在 DSH 启动时**扫描，没有重扫入口，所以必须重启过 DSH |
+| 10 段 `/thumb/main/<动作名>.webm` 200 | 并告诉你哪几段是**红队自己的素材**、哪几段还是**包内占位**（按 HTTP 返回长度与两个目录比对） |
+
+手动等价命令：
+
+```powershell
+# 必须带 Origin，否则会被 DSH 的浏览器信任检查挡成 401
 Invoke-WebRequest "http://127.0.0.1:3080/dsh-redteam-pet-7340/config" -Headers @{Origin='http://127.0.0.1:3080'} -UseBasicParsing
 
 # 素材与池子对齐（不用起 DSH）
@@ -285,6 +301,11 @@ dsh-redteam-pet\
 | 右键菜单有名字，点了没反应（404） | 素材文件名与配置里的动作名不一致（差空格/连字符/简体繁体）→ `node tools\selftest.mjs` 会列出名字 |
 | 素材是透明背景但播放黑底 | VP9 alpha 只有 Chromium 内核认（Chrome/Edge/Electron）；普通播放器显示黑底是正常的 |
 | 设置页提示「宿主半侧还没更新」 | 改了 `lib/index.js` 需要**重启 DSH**；只改 `lib/client.js` 刷新页面即可 |
+| 插件在，但页面上**看不见宠物** | 浏览器半侧没登记 → 跑 `node tools\verify-live.mjs` 看 `/plugins/dsh-redteam-pet/client.js` 是不是 404。是 → **重启 DSH**（这一项只在启动时扫描） |
+| 插件莫名其妙被关掉 | `dshmarket` 会把它的开关状态同步成用户层里一行裸的 `- id: dsh-redteam-pet / disabled: true`。查 `$DSH_HOME\profiles\web\.dsh-market\state.json` 的 `disabled` 列表，并删掉那一行 |
+| 启动时插件被 `dsh-safe` 隔离 | 那是"启动保险丝"：插件启动失败时它会把该行置为 disabled（记在 `$DSH_HOME\dsh-safe\quarantine.json`）。修好插件后：`dsh-safe restore --profile web --id dsh-redteam-pet` |
+| 跑 `pipeline`/`keyscreen` 时看到 `⚠ 首选 ffmpeg 不能做 VP9-alpha` | **正常现象**：本机 PATH 上那个 ffmpeg（剪映/IDE 自带的）没有 `libvpx-vp9` 编码器，脚本自动换用兜底候选。脚本退出码仍是 **0**；想固定用哪个就设 `$env:FFMPEG` |
+| 改了 `cordis.patch.yml` 但没生效 | 加载器的实时重载偶尔会卡在 `previous operation is still pending`（反复快速改文件容易触发）→ **重启 DSH** |
 
 ---
 
