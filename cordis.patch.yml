@@ -1,0 +1,36 @@
+# ============================================================================
+# dsh-redteam-pet 的 bundle patch —— 故意是空数组（重要，别改回 insert）
+# ============================================================================
+#
+# 【为什么这里不 insert 插件行】
+#   DSH 启动时：配置树 = 各 bundle 的 patch 层 + profile 用户层（+ home 层 + overlay）。
+#   而「实时补丁重载」（patchReload: live）重组的补丁栈是：
+#        启动时抓到的 bundlePatches + 重新读的用户层 + home 层 + overlay
+#   —— 也就是说 **bundle 层是启动那一刻快照的**：往 dsh.profile.bundles 里加包
+#   必须重启 DSH 才生效；用户层才是存盘即生效的那一层。
+#
+#   插件行如果这里插一次、profile 用户层再插一次，重启后就会出现**两只宠物**
+#   （insert 是追加，不按 id 去重）。所以本包的选择是：
+#       · 插件行只由 profile 用户层 insert（$DSH_HOME/profiles/web/cordis.patch.yml）
+#         → 存盘即挂载、不用重启 DSH
+#       · 本文件保持空数组，让 bundle 层不再插一行
+#
+# 【实测记录（2026-10-05）】
+#   只走 install_bundle 把它加进 dsh.profile.bundles 时：
+#     /dsh-redteam-pet-7340/config → HTTP 404（bundle 层没进快照）
+#   改成用户层 insert 后：
+#     /dsh-redteam-pet-7340/config → HTTP 200
+#
+# 【会不会影响 dshmarket 的开关？不会】
+#   dshmarket 的 rowIdsForPackage() 有三个来源：包的 bundle patch、包根目录的
+#   cordis.patch.yml、以及**当前 loader 里 name 等于包名的活动行**。
+#   第三条能拿到 `dsh-redteam-pet`（用户层插进去那行的 id），所以市场里的开关照常能
+#   关掉/打开这只宠物（市场是往用户层追加 `- id: dsh-redteam-pet` + `disabled: true`）。
+#
+# 【要改成 bundle 自持插件行】
+#   1) 把下面改成 - insert: [{ id: dsh-redteam-pet, name: 'dsh-redteam-pet' }]
+#   2) 同时删掉 profile 用户层里那段 insert（二选一，别都留）
+#   3) 重启 DSH
+# ============================================================================
+
+[]

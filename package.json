@@ -1,0 +1,97 @@
+{
+  "name": "dsh-redteam-pet",
+  "version": "0.1.0",
+  "description": "红队小队员 —— 网络安全红队主题的桌面宠物：超变形 Q 版蓝毛小队员，亮红色连体工装 + 悬浮全息键盘。踩点/打点/收工全程陪你干活，闲下来会念叨战况。基于 dsh-pet 0.3.5 改造，动作精简到 10 个。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "desktop-pet",
+    "pet",
+    "redteam",
+    "cybersecurity",
+    "floating-widget",
+    "web-ui",
+    "cordis",
+    "react"
+  ],
+  "_comment": [
+    "=============== dsh-redteam-pet 包清单说明 ===============",
+    "血统：本包的宿主半侧 / 浏览器半侧 / 渲染与投递机制，是从 dsh-pet 0.3.5（MIT，作者 PC2005-cloud）的构建产物改造而来：",
+    "  · 全局把标识 dsh-pet 改名为 dsh-redteam-pet（路由前缀、用户数据目录、CSS 类名、槽位键、日志前缀）",
+    "  · assets/config.jsonc 重写为「10 个动作 + 红队人设/台词」",
+    "  · 删掉了 standalone CLI（bin/lib/standalone.js）——本包只做插件，不提供独立模式",
+    "main: lib/index.js —— 宿主半侧入口（Cordis 插件：name/inject/apply）",
+    "exports['./client'] —— 浏览器半侧入口，DSH 模块系统按它提供 /plugins/dsh-redteam-pet/client.js",
+    "dsh.bundle.patch —— 声明本包是 bundle，patch 文件是 cordis.patch.yml",
+    "dsh.client —— 声明浏览器半侧的注入依赖和平台（web）",
+    "cordis.patch.yml 里 id 必须与包名一致：id: dsh-redteam-pet",
+    "用户数据目录：$DSH_HOME/dsh-redteam-pet/（与 dsh-pet 完全分开，互不读对方）",
+    "dependencies —— 运行时依赖；桌面模式（Electron 透明窗）用到，浏览器模式用不到，但 lib/index.js 顶层 import 了它们，不能删",
+    "peerDependencies —— 运行时由宿主（DSH）提供，本包不打包它们",
+    "================================================"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets/webm",
+    "assets/fonts",
+    "assets/pic",
+    "assets/memes",
+    "assets/config.jsonc",
+    "runtime/electron-helper",
+    "cordis.patch.yml"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@electron-internal/extract-zip": "^1.0.5",
+    "@electron/get": "^5.1.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.0-rc.1": "compatible",
+        "0.2.0-rc.2": "compatible"
+      }
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-agent-default-model": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-connection": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-client-ui-slots": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-commands": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-home-paths": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-host-webserver": "^0.2.0-rc.1",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}

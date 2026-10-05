@@ -1,0 +1,35 @@
+# ============================================================================
+# .gitattributes —— 换行符与语言统计
+# ============================================================================
+
+# 文本文件统一入库为 LF，检出时按平台自动转换（避免 Windows/Linux 协作者互相刷 diff）
+* text=auto eol=lf
+
+# 明确按文本处理的
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.jsonc text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.md    text eol=lf
+*.ps1   text eol=lf
+*.ts    text eol=lf
+
+# 二进制：别做任何换行/合并处理
+*.webm  binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ttf   binary
+*.mp4   binary
+*.mov   binary
+
+# lib/ 是从 dsh-pet 的构建产物改出来的（不是本仓库手写的源码），
+# 在 GitHub 语言统计里按"生成物"处理，别让它盖过 tools/ 与 docs/ 的分量。
+lib/**          linguist-generated=true
+assets/**       linguist-documentation=false
+
+# 提交里不显示这些的 diff（行数巨大且无意义）
+package-lock.json  -diff
+pnpm-lock.yaml     -diff
