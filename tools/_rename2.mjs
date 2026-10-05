@@ -87,7 +87,8 @@ const RULES = [
 // ============================================================================
 const PROTECT = [
   'f2x33/redteam-pet-desktop', // 姊妹项目 redteam-pet-desktop 的 GitHub 仓库
-  'f2x33/redteam-pet',         // 本包的 GitHub 仓库（公开，2026-10-05 创建）
+  'f2x33/redpet',              // 本包当前的 GitHub 仓库（发布目标，2026-10-05 创建）
+  'f2x33/redteam-pet',         // 本包**旧**仓库名（历史记录里会提到，保住原样别被改）
   'PC2005-cloud/dsh-pet',      // 上游 dsh-pet 仓库署名
 ].sort((a, b) => b.length - a.length);
 
