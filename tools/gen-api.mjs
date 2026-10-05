@@ -145,6 +145,14 @@ function estimateVideoYuan(resolution, durationSec) {
   return (estimateVideoTokens(resolution, durationSec) / 1e6) * PRICE_VIDEO_YUAN_PER_MTOKENS;
 }
 
+/**
+ * 预算闸门（元）：**预估超过这个数就必须再加一个 --yes 才会真跑**。
+ * 为什么需要它：估价虽然打印了，但打印和开跑之间没有停顿 —— `--all --go` 完全可能
+ * 在人没细看那一行时就烧掉几百元（默认 720p/10 秒 × 10 段 ≈ ¥199）。
+ * 设成 0 或 $env:BUDGET_GUARD_YUAN=0 可关闭。
+ */
+const BUDGET_GUARD_YUAN = 50;
+
 // ----------------------------------------------------------------- 参数 / 配置
 const ARK_BASE = process.env.ARK_BASE || 'https://ark.cn-beijing.volces.com/api/v3';
 const API_KEY = process.env.ARK_API_KEY || '';
@@ -213,6 +221,7 @@ const HELP = `gen-api.mjs —— 用火山方舟(Ark) API 把 docs/02 的 10 段
 
 选项：
   --go                 真正开始发请求（不加永远不发）
+  --yes                预算闸门放行：预估超过 ¥50（可用 $env:BUDGET_GUARD_YUAN 改）时必须再加它
   --probe              只验通路：模型 ID / 两种 schema / base64 首帧，结论写 out/_probe/
   --limit N            只做前 N 段（必须是正整数；N 等于全部段数时等价于 --all，会有提醒）
   --only a,b           只做这几段（名字必须与 assets/config.jsonc 逐字一致）
@@ -251,6 +260,7 @@ function parseArgs(argv) {
     forceStill: false,
     schemaExplicit: Boolean(process.env.VIDEO_SCHEMA), // 用户是否**显式**指定了写法（含环境变量）
     go: false,
+    yes: false, // 预算闸门放行：预估超过 BUDGET_GUARD_YUAN 时必须显式加 --yes
     probe: false,
     all: false,
     skipImage: false,
@@ -289,6 +299,7 @@ function parseArgs(argv) {
       case '--image-size': o.imageSize = val(); break;
       case '--concurrency': o.concurrency = Number(val()); break;
       case '--go': o.go = true; break;
+      case '--yes': o.yes = true; break;
       case '--force': o.force = true; break;
       case '--force-still': o.forceStill = true; break;
       case '--probe': o.probe = true; break;
@@ -1091,6 +1102,26 @@ async function main() {
   console.log('');
   printCost(plans, o, { title: '开跑前再确认一次，本次预计' });
   console.log('  （失败不自动重发；中断后重跑同一条命令即可续跑，已存在的不重复花钱。）');
+
+  // —— 预算闸门：预估超阈值时必须显式加 --yes ——
+  // 打印估价和真正开跑之间没有停顿，`--all --go` 很容易在人没细看时烧掉几百元。
+  const est = estimate(plans, o);
+  const budgetGuard = Number(process.env.BUDGET_GUARD_YUAN ?? BUDGET_GUARD_YUAN);
+  if (budgetGuard > 0 && est.yuan > budgetGuard && !o.yes) {
+    const willVideo = plans.filter((p) => p.needVideo).length;
+    const willImage = plans.filter((p) => p.needVideo && p.needImage).length;
+    console.error(`\n✗ 本次预估 ¥${est.yuan.toFixed(2)}，超过预算闸门 ¥${budgetGuard} —— **已中止，一个请求都没发**。`);
+    console.error('  确认要花这笔钱，就在原命令末尾再加一个 --yes：');
+    console.error(`    node tools/gen-api.mjs ${o.all ? '--all' : `--limit ${o.limit}`} --resolution ${o.resolution} --duration ${o.duration} --go --yes`);
+    console.error(`  （闸门值可用 $env:BUDGET_GUARD_YUAN 改，设 0 关闭）`);
+    if (o.resolution !== '480p' || o.duration > 5) {
+      const cheap = willVideo * estimateVideoYuan('480p', 5) + willImage * PRICE_IMAGE_YUAN;
+      console.error(`\n  💡 便宜得多的等价方案：--resolution 480p --duration 5 → 同样 ${willVideo} 段约 **¥${cheap.toFixed(2)}**`);
+      console.error('     素材最终只有 640×360，480p 完全够；720p/10 秒 是纯浪费。');
+    }
+    process.exitCode = 1;
+    return;
+  }
   console.log('');
 
   const { failures, abort } = await pool(plans, o.concurrency, async (p, i, total) => {
