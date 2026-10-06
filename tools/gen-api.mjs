@@ -257,6 +257,10 @@ const HELP = `gen-api.mjs —— 用火山方舟(Ark) API 把 docs/02 的 10 段
   --only a,b           只做这几段（名字必须与 assets/config.jsonc 逐字一致）
   --all                全量。没给 --all 又没给 --limit/--only 时只空跑
   --skip-image         跳过图生图，用定妆图当每段首帧
+  --still-only         **只出静帧、不出视频**（一张图 ¥0.2，而不是 ¥4.67）。
+                       用来反复调姿势：出图 → 看 → 改提示词 → 再出图。
+                       满意后再跑一次**不带** --still-only 的同款命令即可出视频
+                       （静帧会被复用，不会重复买图）。
   --duration N         视频时长秒数（默认 $env:VIDEO_DURATION 或 10）
   --resolution R       视频分辨率，只能是 480p / 720p / 1080p（默认 $env:VIDEO_RESOLUTION 或 720p）
   --schema flags|fields  视频参数写法（默认 $env:VIDEO_SCHEMA 或 probe 结论或 flags）
@@ -295,6 +299,10 @@ function parseArgs(argv) {
     all: false,
     skipImage: false,
     skipNameGate: false,
+    // --still-only：只做图生图，不出视频。
+    // 为什么要有它：一张静帧 ¥0.2、一段视频 ¥4.47 —— 姿势要反复调的时候，
+    // 先只出图看效果，满意了再出视频，迭代成本差 20 倍。
+    stillOnly: false,
     schema: process.env.VIDEO_SCHEMA || null, // null = 还没定，后面按 probe 结论/默认补
     duration: Number(process.env.VIDEO_DURATION || 10),
     resolution: process.env.VIDEO_RESOLUTION || '720p',
@@ -335,6 +343,7 @@ function parseArgs(argv) {
       case '--probe': o.probe = true; break;
       case '--all': o.all = true; break;
       case '--skip-image': o.skipImage = true; break;
+      case '--still-only': o.stillOnly = true; break;
       case '--skip-name-gate': o.skipNameGate = true; break;
       case '--help': case '-h': o.help = true; break;
       default: throw new Error(`未知参数：${a}`);
@@ -737,14 +746,23 @@ function planFor(seg, o) {
   // --force 只管视频产物（不牵连静帧）；--force-still 才重出静帧（并连带重建该段视频，
   // 否则会出现"静帧换新的了、视频还是旧的"的错配）。
   const needVideo = o.force || o.forceStill || !fs.existsSync(mp4);
+  // --still-only 时只关心静帧在不在（视频那步会被跳过），所以"要不要干活"看 needStill
+  const needStill = !o.skipImage && (o.forceStill || stillFound === undefined);
   const reuseStill = !o.skipImage && !o.forceStill && stillFound !== undefined;
   const needImage = needVideo && !o.skipImage && !reuseStill;
-  return { name: seg.name, mp4, still, stillBase, needVideo, needImage, reuseStill, skipImage: o.skipImage };
+  return {
+    name: seg.name, mp4, still, stillBase,
+    needVideo, needImage, reuseStill, needStill,
+    skipImage: o.skipImage, stillOnly: Boolean(o.stillOnly),
+  };
 }
 
 function estimate(plans, o) {
-  const img = plans.filter((p) => p.needVideo && p.needImage).length;
-  const vid = plans.filter((p) => p.needVideo).length;
+  // --still-only：只花图片钱（一张 ¥0.2），视频 0 段
+  const img = o.stillOnly
+    ? plans.filter((p) => p.needStill).length
+    : plans.filter((p) => p.needVideo && p.needImage).length;
+  const vid = o.stillOnly ? 0 : plans.filter((p) => p.needVideo).length;
   const tokensPerVideo = estimateVideoTokens(o.resolution, o.duration);
   const yuan = img * PRICE_IMAGE_YUAN + vid * estimateVideoYuan(o.resolution, o.duration);
   return { img, vid, yuan, tokensPerVideo };
@@ -1138,8 +1156,10 @@ async function main() {
   const est = estimate(plans, o);
   const budgetGuard = Number(process.env.BUDGET_GUARD_YUAN ?? BUDGET_GUARD_YUAN);
   if (budgetGuard > 0 && est.yuan > budgetGuard && !o.yes) {
-    const willVideo = plans.filter((p) => p.needVideo).length;
-    const willImage = plans.filter((p) => p.needVideo && p.needImage).length;
+    const willVideo = o.stillOnly ? 0 : plans.filter((p) => p.needVideo).length;
+    const willImage = o.stillOnly
+      ? plans.filter((p) => p.needStill).length
+      : plans.filter((p) => p.needVideo && p.needImage).length;
     console.error(`\n✗ 本次预估 ¥${est.yuan.toFixed(2)}，超过预算闸门 ¥${budgetGuard} —— **已中止，一个请求都没发**。`);
     console.error('  确认要花这笔钱，就在原命令末尾再加一个 --yes：');
     console.error(`    node tools/gen-api.mjs ${o.all ? '--all' : `--limit ${o.limit}`} --resolution ${o.resolution} --duration ${o.duration} --go --yes`);
@@ -1156,8 +1176,13 @@ async function main() {
 
   const { failures, abort } = await pool(plans, o.concurrency, async (p, i, total) => {
     const tag = `[${i + 1}/${total}] ${p.name}`;
-    if (!p.needVideo) {
-      console.log(`${tag} … 已存在，跳过（--force 可重做）`);
+    // --still-only：只做图生图，所以"要不要干活"看静帧而不是视频
+    if (p.stillOnly ? !p.needStill : !p.needVideo) {
+      console.log(
+        p.stillOnly
+          ? `${tag} … 静帧已存在，跳过（要重出加 --force-still）`
+          : `${tag} … 已存在，跳过（--force 可重做）`,
+      );
       return;
     }
 
@@ -1182,6 +1207,12 @@ async function main() {
       console.log(`${tag} … 出图 ${(buf.length / 1024).toFixed(0)} KB → ${path.relative(ROOT, stillPath)}（格式 ${mime}，响应字段 ${Object.keys(raw.data?.[0] ?? {}).join(',')}）`);
     }
 
+    // --still-only：拿到静帧就收工，不建视频任务（这一步才是贵的）
+    if (p.stillOnly) {
+      console.log(`✓ ${tag} → 静帧已出（--still-only：不出视频，本次只花 ¥${PRICE_IMAGE_YUAN}）`);
+      return;
+    }
+
     // ② 建视频任务
     console.log(`${tag} … 建视频任务（${models.video} ${schema} ${o.resolution} ${o.duration}s）`);
     const { id } = await createVideo(stillUri, segs.find((s) => s.name === p.name).vid, {
@@ -1204,7 +1235,12 @@ async function main() {
     console.log('（**不自动重发**。修好原因后重跑同一条命令即可增量补齐，已成功/已存在的不会重做。）');
     process.exitCode = 1;
   } else if (plans.length) {
-    console.log('下一步：node tools/pipeline.mjs   （抠像 → 装进插件 → 体检）');
+    console.log(
+      o.stillOnly
+        ? '下一步：先看 out/_stills/ 里的静帧，满意了再跑（不带 --still-only，静帧会被复用、只花视频的钱）：\n'
+          + `  node tools/pipeline.mjs --gen --go --only ${plans.map((p) => p.name).join(',')}`
+        : '下一步：node tools/pipeline.mjs   （抠像 → 装进插件 → 体检）',
+    );
   }
 }
 
